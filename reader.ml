@@ -71,3 +71,28 @@ let make_boolean bool_list =
               else if (c = 'f') then (Bool(false))
               else raise X_no_match);; 
       
+
+let make_paired nt_left nt_right nt =
+  let nt = caten nt_left nt in
+  let nt = pack nt (function (_, e) -> e) in
+  let nt = caten nt nt_right in
+  let nt = pack nt (function (e, _) -> e) in
+  nt;;
+
+let make_spaced nt =
+  make_paired (star nt_whitespace) (star nt_whitespace) nt;;
+
+(*
+let parse_comment = 
+  let nt1 = make_paired (char ';') 
+			(char '\n') nt_any in
+  let nt2 =    in 
+  disj nt1 nt2;;
+let parse_comment = make_paired (make_spaced(char ';')) (make_spaced(char '\n')) (star(nt_any)) ;;
+  
+   *)
+let parse_comment_ = 
+    let nt = caten  (make_spaced(char ';')) (star(const(fun x-> Char.code x<> 10)))  in
+    let nt = caten nt (make_spaced (char (Char.chr 10 ))) in
+    nt ;;
+
