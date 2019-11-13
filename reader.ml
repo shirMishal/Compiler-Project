@@ -55,6 +55,8 @@ end;; (* struct Reader *)
 open PC;;
 open List;;
 exception X_empty_list;;
+
+(*
 let parse_true = make_word char_ci "#t ";;
 let parse_false = make_word char_ci "#f ";;
 let parse_boolean = disj parse_true parse_false;;
@@ -70,7 +72,7 @@ let make_boolean bool_list =
               (if (c = 't') then (Bool(true))
               else if (c = 'f') then (Bool(false))
               else raise X_no_match);; 
-      
+*)
 
 let make_paired nt_left nt_right nt =
   let nt = caten nt_left nt in
@@ -82,17 +84,79 @@ let make_paired nt_left nt_right nt =
 let make_spaced nt =
   make_paired (star nt_whitespace) (star nt_whitespace) nt;;
 
-(*
-let parse_comment = 
-  let nt1 = make_paired (char ';') 
-			(char '\n') nt_any in
-  let nt2 =    in 
-  disj nt1 nt2;;
-let parse_comment = make_paired (make_spaced(char ';')) (make_spaced(char '\n')) (star(nt_any)) ;;
-  
-   *)
-let parse_comment_ = 
-    let nt = caten  (make_spaced(char ';')) (star(const(fun x-> Char.code x<> 10)))  in
-    let nt = caten nt (make_spaced (char (Char.chr 10 ))) in
-    nt ;;
+let make_boolean bool_list = 
+  match bool_list with
+  | [] -> raise X_empty_list
+  | x::xs ->  let c = (lowercase_ascii (nth bool_list 1)) in
+              (if (c = 't') then true
+              else if (c = 'f') then false
+              else raise X_no_match);;
 
+(*parse_boolean (string_to_list "#T bvfhdbvdzd");;
+- : bool * char list =
+(true, ['b'; 'v'; 'f'; 'h'; 'd'; 'b'; 'v'; 'd'; 'z'; 'd'])
+*)
+let parse_boolean = 
+let parse_true = make_word char_ci "#t " in
+let parse_false = make_word char_ci "#f " in
+let nt = disj parse_true parse_false in
+let nt = pack nt make_boolean  in
+nt;;
+
+
+(*optional : add spaced without \n caracter around char';'*)
+let parse_comment_endline = 
+let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
+let nt = pack nt (fun x -> []) in 
+nt;;
+
+(*parse_comment_endinput (string_to_list "; jfcvnd   njvn k ndkllf     ");;
+- : 'a list * char list = ([], [])
+parse_comment_endinput (string_to_list "; hhhhhh 
+shircb");;
+Exception: PC.X_no_match. *)
+let parse_comment_endinput = 
+let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
+let nt = not_followed_by nt (char '\n') in 
+let nt = pack nt (fun x -> []) in 
+nt;;
+
+let parse_line_comment = disj parse_comment_endline parse_comment_endinput;;
+
+
+let parse_symbolChar = 
+let nt_capital = const (fun ch -> 'A' <= ch && ch <= 'Z') in
+let nt_letters = disj nt_capital (const (fun ch -> 'a' <= ch && ch <= 'z')) in 
+let nt = disj nt_letters (const (fun ch -> '0' <= ch && ch <= '9')) in
+let nt = disj_list ([nt; (char '!'); (char '$'); (char '^'); (char '*'); (char '-'); (char '_'); (char '='); (char '+'); (char '<'); (char '>'); (char '/'); (char '?')]) in
+nt;;
+
+(*parse_symbol (string_to_list "hbGJNJ123^!*#{ mnc mmc xk");;
+- : string * char list =
+("hbgjnj123^!*",
+ ['#'; '{'; ' '; 'm'; 'n'; 'c'; ' '; 'm'; 'm'; 'c'; ' '; 'x'; 'k'])
+ *)
+let parse_symbol = 
+let nt = plus parse_symbolChar  in
+let nt = pack nt (fun x-> list_to_string(List.map lowercase_ascii (x))) in
+nt;;
+
+
+let parse_string = 
+let nt_metaChar = disj_list ([(char '\r'); (char '\n'); (char '\t'); (char (Char.chr 12)); (char '\\'); (char '\"')]) in
+let nt_literalChar = (const(fun x-> (Char.code x<> 34)&&(Char.code x<> 92) )) in
+let nt = disj nt_literalChar nt_metaChar in
+let nt = star nt in
+let nt = make_paired (char '"') (char '"') nt in
+make_spaced nt;;
+
+
+(*parse_string (string_to_list "\"aB$ a\"shir");;
+- : char list * char list =
+(['"'; 'a'; 'B'; '$'; ' '; 'a'; '"'; 's'; 'h'; 'i'; 'r'], []) 
+
+bound with '"'
+parse_string (string_to_list "\"aB$ a\"shir");;
+Exception: PC.X_no_match.
+
+*)
