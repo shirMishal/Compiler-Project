@@ -4,14 +4,15 @@
 exception X_not_yet_implemented;;
 exception X_this_should_not_happen;;
   
-type number =
+type tuple =
   | Int of int
   | Float of float;;
   
 type sexpr =
   | Bool of bool
   | Nil
-  | Number of number
+  | Number of tuple
+
   | Char of char
   | String of string
   | Symbol of string
@@ -96,3 +97,33 @@ let parse_comment_ =
     let nt = caten nt (make_spaced (char (Char.chr 10 ))) in
     nt ;;
 
+let parse_minus = char_ci '-';;
+let parse_plus = char_ci '+';;
+let math_sign_nt = disj (char_ci '-') (char_ci '+');;
+
+
+let make_nt_digit ch_from ch_to displacement =
+    let nt = const (fun ch -> ch_from <= ch && ch <= ch_to) in
+    let nt = pack nt (let delta = (Char.code ch_from) - displacement in
+		      fun ch -> (Char.code ch) - delta) in nt;;
+
+
+(**val int : char list = ['-'; '0'; '0'; '0'; '0'; '0'; '1'; '2']
+# parse_integer int;;
+- : int * char list = (-12, [])
+ *)
+let parse_integer = 
+let nt = make_nt_digit '0' '9' 0 in
+let nt = plus nt in
+let nt_sign = disj (char_ci '-') (char_ci '+') in
+let nt_sign = maybe nt_sign in
+let nt = caten nt_sign nt in
+let nt = pack nt (fun tuple ->
+                  match tuple
+                 with
+                  | (None, digits) -> List.fold_left  (fun a b -> 10 * a + b) 0 digits
+                  | (Some ch, digits) ->  match ch with
+                                          | '-' -> -1 * (List.fold_left (fun a b -> 10 * a + b) 0 digits)
+                                          | '+' -> List.fold_left (fun a b -> 10 * a + b) 0 digits
+                                          | _ -> raise X_this_should_not_happen) in
+nt;;
