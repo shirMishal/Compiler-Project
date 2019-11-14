@@ -56,6 +56,7 @@ end;; (* struct Reader *)
 open PC;;
 open List;;
 exception X_empty_list;;
+exception X_not_named_char;;
 
 (*
 let parse_true = make_word char_ci "#t ";;
@@ -85,12 +86,23 @@ let make_paired nt_left nt_right nt =
 let make_spaced nt =
   make_paired (star nt_whitespace) (star nt_whitespace) nt;;
 
+let make_nt_parenthesized_expr nt =
+  let nt1 = make_paired (make_spaced (char '(')) 
+			(make_spaced (char ')')) nt in
+  let nt2 = make_paired (make_spaced (char '[')) 
+			(make_spaced (char ']')) nt in
+  let nt3 = make_paired (make_spaced (char '{'))
+			(make_spaced (char '}')) nt in
+  let nt = disj nt1 (disj nt2 nt3) in
+  nt;;
+
+
 let make_boolean bool_list = 
   match bool_list with
   | [] -> raise X_empty_list
   | x::xs ->  let c = (lowercase_ascii (nth bool_list 1)) in
-              (if (c = 't') then true
-              else if (c = 'f') then false
+              (if (c = 't') then Bool(true)
+              else if (c = 'f') then Bool(false)
               else raise X_no_match);;
 
 (*parse_boolean (string_to_list "#T bvfhdbvdzd");;
@@ -108,6 +120,8 @@ nt;;
 (*optional : add spaced without \n caracter around char';'*)
 let parse_comment_endline = 
 let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
+let nt = plus nt in
+let nt = make_spaced nt in
 let nt = pack nt (fun x -> []) in 
 nt;;
 
@@ -121,8 +135,33 @@ let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
 let nt = not_followed_by nt (char '\n') in 
 let nt = pack nt (fun x -> []) in 
 nt;;
+(*
+parse_line_comment (string_to_list "                
+;   ncxjnjckjkknck\"
+         ;nxmcjdknfjdk
+           ;nxmcb hjcbvhjcb:             
+                    ");;
+- : 'a list * char list = ([], [])
+*)
+let parse_line_comment = 
+let nt = disj parse_comment_endline parse_comment_endinput in
+let nt = star nt in (* explanation: parse_line_comment (string_to_list "                
+                                          ;   ncxjnjckjkknck\"
+                                                  ;nxmcjdknfjdk
+                                                    ;nxmcb hjcbvhjcb:");;
+                                          - : 'a list list * char list = ([[]; []; []], []) *)
+let nt = pack nt List.flatten in
+make_spaced nt;;
 
-let parse_line_comment = disj parse_comment_endline parse_comment_endinput;;
+let parse_sexpCommentPrefix = make_spaced(word "#;");;
+(*let parse_sexp =  complete
+
+
+let parse_sexp_comment =
+let nt = caten parse_sexpCommentPrefix parse_sexp in
+let nt = pack nt (fun (_,_)-> nul) in
+make_spaced nt;;
+*)
 
 
 let parse_symbolChar = 
@@ -139,10 +178,10 @@ nt;;
  *)
 let parse_symbol = 
 let nt = plus parse_symbolChar  in
-let nt = pack nt (fun x-> list_to_string(List.map lowercase_ascii (x))) in
+let nt = pack nt (fun x-> Symbol(list_to_string(List.map lowercase_ascii (x)))) in
 nt;;
 
-
+(*
 let parse_string = 
 let nt_metaChar = disj_list ([(char '\r'); (char '\n'); (char '\t'); (char (Char.chr 12)); (char '\\'); (char '\"')]) in
 let nt_literalChar = (const(fun x-> (Char.code x<> 34)&&(Char.code x<> 92) )) in
@@ -151,6 +190,26 @@ let nt = star nt in
 let nt = make_paired (char '"') (char '"') nt in
 make_spaced nt;;
 
+let convert_metachar = (fun lst-> (char (nth lst 1 )));;
+let nt_metaChar = 
+let nt = disj_list ([(char '\r'); (char '\n'); (char '\t'); (char (Char.chr 12)); (char '\\'); (char '\"')]) in
+let nt = make_paired (char '\"') (char '\"') nt in
+nt;;
+
+let nt = disj_list ([caten (char '\\')(char '\r'); caten (char '\\')(char '\n'); caten (char '\\')(char '\t'); caten (char '\\')(char (Char.chr 12)); caten (char '\\')(char '\\'); caten (char '\\')(char '\"')]) in*)
+ 
+let nt_metaChar = 
+let nt = disj_list ([(char_ci '\r'); (char_ci '\n'); (char_ci '\t'); (char_ci (Char.chr 12)); (char '\\'); (char '\"')]) in
+let nt = make_paired (char '\"') (char '\"') nt in
+nt;;
+
+let parse_string = 
+let nt_metaChar = disj_list ([(char '\r'); (char '\n'); (char '\t'); (char (Char.chr 12)); (char '\\'); (char '\"')]) in
+let nt_literalChar = (const(fun x-> (Char.code x<> 34)&&(Char.code x<> 92) )) in
+let nt = disj nt_literalChar nt_metaChar in
+(*let nt = star nt in*)
+let nt = make_paired (char '\"') (char '\"') nt in
+nt;;
 
 (*parse_string (string_to_list "\"aB$ a\"shir");;
 - : char list * char list =
@@ -160,6 +219,38 @@ bound with '"'
 parse_string (string_to_list "\"aB$ a\"shir");;
 Exception: PC.X_no_match. *)
 
+let parse_namedChar = 
+let nt = disj_list ([(word_ci "newline"); (word_ci "nul");(word_ci "page");(word_ci "return");(word_ci "space");(word_ci "tab");]) in 
+let nt = pack nt (fun word_lst-> match (list_to_string(List.map lowercase_ascii (word_lst) ) )
+                                with
+                                |"newline" -> (Char.chr 10)
+                                |"nul" -> (Char.chr 0)
+                                |"page" -> (Char.chr 12)
+                                |"return" -> (Char.chr 13)
+                                |"space" -> (Char.chr 32)
+                                |"tab" -> (Char.chr 9)
+                                |_ -> raise X_not_named_char (*???? not sure we need it ... maybe for warnings *)
+                  ) in
+nt;;
+let parse_visibleSimple = const (fun ch -> ch > ' ');;
+let parse_charPrefix = word "#\\";;
+
+(* parse_char (string_to_list "#\\a  ");;- : char * char list = ('a', [' '; ' '])
+parse_char (string_to_list "#\\tab \\");;- : char * char list = ('\t', [' '; '\\'])
+parse_char (string_to_list "#\\ abc");;Exception: PC.X_no_match.
+include spaced results:
+parse_char (string_to_list "    #\\nul   abc");;- : char * char list = ('\000', ['a'; 'b'; 'c'])
+??? we should think if spaced needed after char*)
+let parse_char =
+let nt = disj parse_namedChar parse_visibleSimple in
+let nt = caten parse_charPrefix nt in
+let nt = pack nt (fun (_,ch)-> Char (ch)) in
+make_spaced nt;;
+
+(* parse nil input (;njxsk 
+        #;a      );hi)
+        shoud return (nil,[])
+*)
 let parse_minus = char_ci '-';;
 let parse_plus = char_ci '+';;
 let math_sign_nt = disj (char_ci '-') (char_ci '+');;
