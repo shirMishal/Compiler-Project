@@ -160,34 +160,90 @@ bound with '"'
 parse_string (string_to_list "\"aB$ a\"shir");;
 Exception: PC.X_no_match. *)
 
-let parse_minus = char_ci '-';;
-let parse_plus = char_ci '+';;
-let math_sign_nt = disj (char_ci '-') (char_ci '+');;
-
 
 let make_nt_digit ch_from ch_to displacement =
     let nt = const (fun ch -> ch_from <= ch && ch <= ch_to) in
     let nt = pack nt (let delta = (Char.code ch_from) - displacement in
 		      fun ch -> (Char.code ch) - delta) in nt;;
 
+let nt_all_digits = 
+let nt = make_nt_digit '0' '9' 0 in
+let nt = disj nt (make_nt_digit 'a' 'z' 10) in
+let nt = disj nt (make_nt_digit 'A' 'Z' 10) in
+nt;;
 
-(*val int : char list = ['-'; '0'; '0'; '0'; '0'; '0'; '1'; '2']
-# parse_integer int;;
-- : int * char list = (-12, [])
- *)
-let parse_integer = 
+
+(* help function - not for outter usage*)
+let parse_to_number base = 
+let nt = nt_all_digits in
+let nt = plus nt in
+let nt_sign = disj (char_ci '-') (char_ci '+') in
+let nt_sign = maybe nt_sign in
+let nt = caten nt_sign nt in
+let nt = pack nt (fun tuple ->
+                  (match tuple with
+                  | (None, digits) -> List.fold_left  (fun a b -> base * a + b) 0 digits
+                  | (Some ch, digits) ->  match ch with
+                                          | '-' -> (-1) * (List.fold_left (fun a b -> base * a + b) 0 digits)
+                                          | '+' -> List.fold_left (fun a b -> base * a + b) 0 digits
+                                          |  _ -> raise X_this_should_not_happen)) in nt;;
+
+let parse_decimal = 
+let base = 10 in
 let nt = make_nt_digit '0' '9' 0 in
 let nt = plus nt in
 let nt_sign = disj (char_ci '-') (char_ci '+') in
 let nt_sign = maybe nt_sign in
 let nt = caten nt_sign nt in
 let nt = pack nt (fun tuple ->
-                  match tuple
-                 with
-                  | (None, digits) -> List.fold_left  (fun a b -> 10 * a + b) 0 digits
+                  (match tuple with
+                  | (None, digits) -> List.fold_left  (fun a b -> base * a + b) 0 digits
                   | (Some ch, digits) ->  match ch with
-                                          | '-' -> -1 * (List.fold_left (fun a b -> 10 * a + b) 0 digits)
-                                          | '+' -> List.fold_left (fun a b -> 10 * a + b) 0 digits
-                                          | _ -> raise X_this_should_not_happen) in
+                                          | '-' -> (-1) * (List.fold_left (fun a b -> base * a + b) 0 digits)
+                                          | '+' -> List.fold_left (fun a b -> base * a + b) 0 digits
+                                          |  _ -> raise X_this_should_not_happen)) in nt;;
+
+let make_nt_number base =
+if (base > 36) 
+then raise X_no_match
+else let nt = parse_to_number base in
+let nt = pack nt (fun number ->
+                  Number(Int(number))) in
 nt;;
 
+let parse_to_float base =
+let nt = parse_to_number base in
+let nt = caten nt (char_ci '.') in
+let nt = pack nt (fun (e, _) -> e) in
+let nt_right = make_nt_digit '0' '9' 0 in
+let nt_right = plus nt_right in
+let nt = caten nt nt_right in
+let nt = pack nt (fun number ->
+                  match number with
+                  | (left, right) -> let right = List.map (fun int -> float_of_int int) right in
+                  (float_of_int left) +. List.fold_right (fun a b -> (b /. 10.0 +. a /. 10.0)) right 0.0) in
+
+nt
+
+
+
+(*val int : char list = ['-'; '0'; '0'; '0'; '0'; '0'; '1'; '2']
+# parse_integer int;;
+- : int * char list = (-12, [])
+ *)
+let nt_integer = make_nt_number 10;;
+
+
+let nt_radix = 
+let nt = (caten parse_decimal (char_ci 'r')) in
+let nt = caten nt (plus nt_all_digits) in
+let nt = caten nt (maybe (caten (char_ci '.') (plus nt_all_digits))) in
+let nt = pack nt (fun (((base, char_r), left_of_dot), x) -> 
+                let left_number = List.fold_left (fun a b -> base * a + b) 0 left_of_dot in
+                match x with
+                | Some ('.', right_of_dot) ->  let right_dot_as_float = List.map float_of_int right_of_dot  in
+                          let base_float = float_of_int base in
+                          let left_number_float = (float_of_int left_number) in
+                          Number (Float (left_number_float +. (List.fold_right (fun a b -> a /. base_float +. b /. base_float) right_dot_as_float 0.0)))
+                | None -> Number (Int(left_number)))
+                in nt;;
