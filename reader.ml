@@ -340,5 +340,159 @@ let nt = pack nt (fun (((base, char_r), left_of_dot), x) ->
                           let base_float = float_of_int base in
                           let left_number_float = (float_of_int left_number) in
                           Number (Float (left_number_float +. (List.fold_right (fun a b -> a /. base_float +. b /. base_float) right_dot_as_float 0.0)))
-                | None -> Number (Int(left_number)))
+                | None -> Number (Int(left_number))
+                | _ -> raise X_this_should_not_happen)
                 in nt;;
+
+
+
+let make_boolean bool_list = 
+  match bool_list with
+  | [] -> raise X_empty_list
+  | x::xs ->  let c = (lowercase_ascii (nth bool_list 1)) in
+              (if (c = 't') then Bool(true)
+              else if (c = 'f') then Bool(false)
+              else raise X_no_match);;
+
+(*parse_boolean (string_to_list "#T bvfhdbvdzd");;
+- : bool * char list =
+(true, ['b'; 'v'; 'f'; 'h'; 'd'; 'b'; 'v'; 'd'; 'z'; 'd'])
+*)
+let parse_boolean = 
+let parse_true = make_word char_ci "#t" in
+let parse_false = make_word char_ci "#f" in
+let nt = disj parse_true parse_false in
+let nt = pack nt make_boolean  in
+nt;;
+
+
+(*optional : add spaced without \n caracter around char';'*)
+let parse_comment_endline = 
+let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
+let nt = plus nt in
+let nt = make_spaced nt in
+let nt = pack nt (fun x -> []) in 
+nt;;
+
+(*parse_comment_endinput (string_to_list "; jfcvnd   njvn k ndkllf     ");;
+- : 'a list * char list = ([], [])
+parse_comment_endinput (string_to_list "; hhhhhh 
+shircb");;
+Exception: PC.X_no_match. *)
+let parse_comment_endinput = 
+let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
+let nt = not_followed_by nt (char '\n') in 
+let nt = pack nt (fun x -> []) in 
+nt;;
+(*
+parse_line_comment (string_to_list "                
+;   ncxjnjckjkknck\"
+         ;nxmcjdknfjdk
+           ;nxmcb hjcbvhjcb:             
+                    ");;
+- : 'a list * char list = ([], [])
+*)
+let parse_line_comment = 
+let nt = disj parse_comment_endline parse_comment_endinput in
+let nt = star nt in (* explanation: parse_line_comment (string_to_list "                
+                                          ;   ncxjnjckjkknck\"
+                                                  ;nxmcjdknfjdk
+                                                    ;nxmcb hjcbvhjcb:");;
+                                          - : 'a list list * char list = ([[]; []; []], []) *)
+let nt = pack nt List.flatten in
+make_spaced nt;;
+
+
+
+let parse_sexpCommentPrefix = make_spaced(word "#;");;
+(*let parse_sexp =  complete
+
+
+let parse_sexp_comment =
+let nt = caten parse_sexpCommentPrefix parse_sexp in
+let nt = pack nt (fun (,)-> nul) in
+make_spaced nt;;
+*)
+
+
+let parse_symbolChar = 
+let nt_capital = const (fun ch -> 'A' <= ch && ch <= 'Z') in
+let nt_letters = disj nt_capital (const (fun ch -> 'a' <= ch && ch <= 'z')) in 
+let nt = disj nt_letters (const (fun ch -> '0' <= ch && ch <= '9')) in
+let nt = disj_list ([nt; (char '!'); (char '$'); (char '^'); (char '*'); (char '-'); (char '_'); (char '='); (char '+'); (char '<'); (char '>'); (char '/'); (char '?')]) in
+nt;;
+
+(*parse_symbol (string_to_list "hbGJNJ123^!#{ mnc mmc xk");;
+- : string * char list =
+("hbgjnj123^!*",
+ ['#'; '{'; ' '; 'm'; 'n'; 'c'; ' '; 'm'; 'm'; 'c'; ' '; 'x'; 'k'])
+ *)
+let parse_symbol = 
+let nt = plus parse_symbolChar  in
+let nt = pack nt (fun x-> Symbol(list_to_string(List.map lowercase_ascii (x)))) in
+nt;;
+
+ (*
+let p  = make_nt_metaChar 'N';; val p : char list -> char * char list = <fun>
+ # p (string_to_list "\\Nrest");;- : char * char list = ('\n', ['r'; 'e'; 's'; 't'])
+let p  = make_nt_metaChar '\"';;  val p : char list -> char * char list = <fun>
+ # p (string_to_list "\\\"rest");  - : char * char list = ('"', ['r'; 'e'; 's'; 't'])
+*)
+let make_nt_metaChar_letter ch = 
+let nt = caten (char '\\') (char_ci ch) in
+let nt = pack nt (fun (_, e) -> match (lowercase_ascii(e)) with 
+                                |'r' -> (Char.chr 13)
+                                |'n' -> (Char.chr 10)
+                                |'t' -> (Char.chr 9)
+                                |'f' -> (Char.chr 12)
+                                |_ -> raise X_no_match
+
+                  ) in
+nt;;
+
+let make_nt_metaChar_special ch = 
+let nt = caten (char '\\') (char_ci ch) in
+let nt = pack nt (fun (_, e) -> e) in
+nt;;
+
+(*parse_string (string_to_list "\"\\Nshir\"rest");;
+- : sexpr * char list = (String "\nshir", ['r'; 'e'; 's'; 't'])
+parse_string (string_to_list "\"\\\\\\\"");; ->  Exception: PC.X_no_match.*)
+let parse_string = 
+let nt_metaChar = disj_list ([(make_nt_metaChar_letter 'r'); (make_nt_metaChar_letter 'n'); (make_nt_metaChar_letter 't'); (make_nt_metaChar_letter 'f'); (make_nt_metaChar_special '\\'); (make_nt_metaChar_special '\"')]) in
+let nt_literalChar = (const(fun x-> (Char.code x<> 34)&&(Char.code x<> 92) )) in
+let nt = disj nt_literalChar nt_metaChar in
+let nt = star nt in
+let nt = make_paired (char '"') (char '"') nt in
+let nt = pack nt (fun ch_lst -> String(list_to_string ch_lst)) in
+nt;;
+
+
+
+let parse_namedChar = 
+let nt = disj_list ([(word_ci "newline"); (word_ci "nul");(word_ci "page");(word_ci "return");(word_ci "space");(word_ci "tab");]) in 
+let nt = pack nt (fun word_lst-> match (list_to_string(List.map lowercase_ascii (word_lst) ) )
+                                with
+                                |"newline" -> (Char.chr 10)
+                                |"nul" -> (Char.chr 0)
+                                |"page" -> (Char.chr 12)
+                                |"return" -> (Char.chr 13)
+                                |"space" -> (Char.chr 32)
+                                |"tab" -> (Char.chr 9)
+                                |_ -> raise X_not_named_char (*???? not sure we need it ... maybe for warnings *)
+                  ) in
+nt;;
+let parse_visibleSimple = const (fun ch -> ch > ' ');;
+let parse_charPrefix = word "#\\";;
+
+(* parse_char (string_to_list "#\\a  ");;- : char * char list = ('a', [' '; ' '])
+parse_char (string_to_list "#\\tab \\");;- : char * char list = ('\t', [' '; '\\'])
+parse_char (string_to_list "#\\ abc");;Exception: PC.X_no_match.
+include spaced results:
+parse_char (string_to_list "    #\\nul   abc");;- : char * char list = ('\000', ['a'; 'b'; 'c'])
+??? we should think if spaced needed after char*)
+let parse_char =
+let nt = disj parse_namedChar parse_visibleSimple in
+let nt = caten parse_charPrefix nt in
+let nt = pack nt (fun (_,ch)-> Char (ch)) in
+make_spaced nt;;
