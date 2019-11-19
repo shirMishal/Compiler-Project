@@ -135,7 +135,8 @@ let nt = pack nt (fun number ->
                   Number(Int(number))) in
 nt;;
 
-let nt_float base =
+let nt_float =
+let base = 10 in
 let nt = parse_to_number base in
 let nt = caten nt (char_ci '.') in
 let nt = pack nt (fun (e, _) -> e) in
@@ -144,10 +145,27 @@ let nt_right = plus nt_right in
 let nt = caten nt nt_right in
 let nt = pack nt (fun number ->
                   match number with
-                  | (left, right) -> let right = List.map (fun int -> float_of_int int) right in
-                  (float_of_int left) +. List.fold_right (fun a b -> (b /. 10.0 +. a /. 10.0)) right 0.0) in
+                  | (left, right) -> let sign = if (left < 0) then ( -. ) else ( +. ) in
+                  let right = List.map (fun int -> float_of_int int) right in
+                  (float_of_int left) +. List.fold_right (fun a b  -> (sign (b /. 10.0) (a /. 10.0))) right 0.0) in
 let nt = pack nt (fun float -> Number(Float(float)))
 in nt;;
+
+
+let parse_float =
+let base = 10 in 
+let nt = parse_to_number base in
+let nt = caten nt (char_ci '.') in
+let nt = pack nt (fun (e, _) -> e) in
+let nt_right = make_nt_digit '0' '9' 0 in
+let nt_right = plus nt_right in
+let nt = caten nt nt_right in
+let nt = pack nt (fun number ->
+                  match number with
+                  | (left, right) -> let sign = if (left < 0) then ( -. ) else ( +. ) in
+                                     let right = List.map (fun int -> float_of_int int) right in
+                  (float_of_int left) +. List.fold_right (fun a b -> (sign (b /. 10.0) (a /. 10.0))) right 0.0) in
+                  nt;;
 
 
 (*val int : char list = ['-'; '0'; '0'; '0'; '0'; '0'; '1'; '2']
@@ -182,24 +200,20 @@ let pow one mul a n =
   in
   g a one n) in
 let base = 10 in
-let nt = parse_decimal in
-let nt_perhaps_float = maybe (caten (char_ci '.') (plus (make_nt_digit '0' '9' 0))) in
-let nt = caten nt nt_perhaps_float in
-let nt = caten nt (char_ci 'e') in
-let nt = caten nt parse_decimal in
-let nt = pack nt (fun (((left_of_dot, maybe_float_right), char_e), exponent) ->
-                  match maybe_float_right with
-                  | None -> Number(Int ((pow 1 ( * ) 10 exponent) * left_of_dot))
-                  | Some ('.', list_of_digits) ->
-                    let left_of_dot = float_of_int left_of_dot in
-                    let base = float_of_int base in
-                    let list_of_digits = List.map (fun int -> float_of_int int) list_of_digits in
-                    let coefficient = left_of_dot +. (List.fold_right (fun a b -> a /. base +. b /. base) list_of_digits 0.0) in
-                    Number(Float (((pow 1.0 ( *. ) 10.0 exponent) *. coefficient)))
-                  | _ -> raise X_this_should_not_happen) in
+let nt_as_integer = parse_decimal in
+let nt_as_integer = caten nt_as_integer (char_ci 'e') in
+let nt_as_integer = caten nt_as_integer parse_decimal in
+let nt_as_integer = pack nt_as_integer (fun ((coefficient, char_e), exponent) ->
+                                        Number(Int(coefficient * (pow 1 ( * ) 10 exponent)))) in
+let nt_as_float = parse_float in
+let nt_as_float = caten nt_as_float (char_ci 'e') in
+let nt_as_float = caten nt_as_float parse_decimal in
+let nt_as_float = pack nt_as_float (fun ((coefficient, char_e), exponent) ->
+                                    Number(Float(coefficient *. (pow 1. ( *. ) 10. exponent)))) in
+let nt = disj nt_as_float nt_as_integer in 
 nt;;
 
-let nt_number = disj_list [nt_radix; nt_scientific; nt_float 10; nt_integer];;
+let nt_number = disj_list [nt_radix; nt_scientific; nt_float; nt_integer];;
 
 
 let make_boolean bool_list = 
@@ -365,7 +379,7 @@ make_spaced nt;;
 let parse_symbol_for_tag = 
 let nt = plus parse_symbolChar  in
 let nt = pack nt (fun x-> list_to_string(List.map lowercase_ascii (x))) in
-nt;;
+make_spaced nt;;
 
 (* should be without space around #{ } 
 parse_tag (string_to_list "#{hi}=exp");;
@@ -377,8 +391,9 @@ let parse_tag =
 let nt_l = (word "#{") in
 let nt_r =(word "}") in
 let nt = make_paired  nt_l nt_r parse_symbol_for_tag in
-let nt = pack nt (fun s -> TagRef(s)) in
+let nt = pack nt (fun s -> s) in
 nt;;
+
 (*
 let on_result nt f s =
   let (e, s) = (nt s) in
@@ -395,6 +410,13 @@ nt;;
 (*???? we should change the spaced into includes comments *)
 let parse_parenthesized_expr nt = make_paired (make_spaced (char '(')) (make_spaced (char ')')) nt ;;
 
+
+
+let check_tag_expression symbol sexp =
+match sexp with
+| Pair(left, right) -> check_tag_expression(left) || check_tag_expression(right)
+| TaggedSexpr(sring, sexp) -> string = symbol || check_tag_expression(sexp)
+| _ -> false;;
 
 (*parse_sexpr (string_to_list "(#f)rest");;
 - : sexpr * char list = (Pair (Bool false, Nil), ['r'; 'e'; 's'; 't'])
@@ -451,9 +473,16 @@ let parse_comments = disj_list ([parse_whitespaces; parse_line_comment; parse_se
 let parse_comments = star parse_comments in
 (*let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in*)
 
+let parse_taggedExp =  parse_tag in
+let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexp)) in   
+let parse_taggedExp = pack parse_taggedExp (fun (tag, maybe_exp) -> 
+                  match maybe_exp with
+                  | None -> TagRef(tag)
+                  | Some(eq, sexp) -> if (check_tag_expression(tag sexp)) then TaggedSexpr(tag, sexp) else raise X_no_match)
+in
 (*let nt = disj_list ([parse_boolean ; parse_char ; (*parse_number*); parse_string ; parse_symbol ; (*parse_list ; parse_dottedList ;*) parse_quote ;(* parse_quasiQuoted ; parse_unquoted; parse_unquoted_sp ; parse_taggedExp*)]) in*)
 let nt = disj_list ([parse_boolean ; parse_char ; parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList ]) in
-( make_paired parse_comments parse_comments nt) ch_lst;;
+make_paired (parse_comments) (parse_comments) nt ch_lst;;
 
 
 
