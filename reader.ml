@@ -135,7 +135,7 @@ let nt = pack nt (fun number ->
                   Number(Int(number))) in
 nt;;
 
-let parse_to_float base =
+let nt_float base =
 let nt = parse_to_number base in
 let nt = caten nt (char_ci '.') in
 let nt = pack nt (fun (e, _) -> e) in
@@ -146,9 +146,8 @@ let nt = pack nt (fun number ->
                   match number with
                   | (left, right) -> let right = List.map (fun int -> float_of_int int) right in
                   (float_of_int left) +. List.fold_right (fun a b -> (b /. 10.0 +. a /. 10.0)) right 0.0) in
-
-nt
-
+let nt = pack nt (fun float -> Number(Float(float)))
+in nt;;
 
 
 (*val int : char list = ['-'; '0'; '0'; '0'; '0'; '0'; '1'; '2']
@@ -173,6 +172,34 @@ let nt = pack nt (fun (((base, char_r), left_of_dot), x) ->
                 | _ -> raise X_this_should_not_happen)
                 in nt;;
 
+
+let nt_scientific =
+let pow one mul a n =
+  (let rec g p x = function
+  | 0 -> x
+  | i ->
+      g (mul p p) (if i mod 2 = 1 then mul p x else x) (i/2)
+  in
+  g a one n) in
+let base = 10 in
+let nt = parse_decimal in
+let nt_perhaps_float = maybe (caten (char_ci '.') (plus (make_nt_digit '0' '9' 0))) in
+let nt = caten nt nt_perhaps_float in
+let nt = caten nt (char_ci 'e') in
+let nt = caten nt parse_decimal in
+let nt = pack nt (fun (((left_of_dot, maybe_float_right), char_e), exponent) ->
+                  match maybe_float_right with
+                  | None -> Number(Int ((pow 1 ( * ) 10 exponent) * left_of_dot))
+                  | Some ('.', list_of_digits) ->
+                    let left_of_dot = float_of_int left_of_dot in
+                    let base = float_of_int base in
+                    let list_of_digits = List.map (fun int -> float_of_int int) list_of_digits in
+                    let coefficient = left_of_dot +. (List.fold_right (fun a b -> a /. base +. b /. base) list_of_digits 0.0) in
+                    Number(Float (((pow 1.0 ( *. ) 10.0 exponent) *. coefficient)))
+                  | _ -> raise X_this_should_not_happen) in
+nt;;
+
+let nt_number = disj_list [nt_radix; nt_scientific; nt_float 10; nt_integer];;
 
 
 let make_boolean bool_list = 
@@ -226,7 +253,7 @@ let nt = disj parse_comment_endline parse_comment_endinput in
 let nt = star nt in (* explanation: parse_line_comment (string_to_list "                
                                           ;   ncxjnjckjkknck\"
                                                   ;nxmcjdknfjdk
-                                                    ;nxmcb hjcbvhjcb:");;
+                  parse_to                                  ;nxmcb hjcbvhjcb:");;
                                           - : 'a list list * char list = ([[]; []; []], []) *)
 let nt = pack nt List.flatten in
 make_spaced nt;;
