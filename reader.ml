@@ -221,15 +221,19 @@ let nt = disj parse_true parse_false in
 let nt = pack nt make_boolean  in
 nt;;
 
-
-(*optional : add spaced without \n caracter around char';'*)
+let parse_whitespaces = pack nt_whitespace (fun x-> ());;
+(*optional : add spaced without \n caracter around char';'
 let parse_comment_endline = 
 let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
 let nt = plus nt in
 let nt = make_spaced nt in
 let nt = pack nt (fun x -> []) in 
 nt;;
-
+*)
+let parse_comment_endline = 
+let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
+let nt = pack nt (fun x -> ()) in 
+nt;;
 (*parse_comment_endinput (string_to_list "; jfcvnd   njvn k ndkllf     ");;
 - : 'a list * char list = ([], [])
 parse_comment_endinput (string_to_list "; hhhhhh 
@@ -238,7 +242,7 @@ Exception: PC.X_no_match. *)
 let parse_comment_endinput = 
 let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
 let nt = not_followed_by nt (char '\n') in 
-let nt = pack nt (fun x -> []) in 
+let nt = pack nt (fun x -> ()) in 
 nt;;
 (*
 parse_line_comment (string_to_list "                
@@ -255,12 +259,12 @@ let nt = star nt in (* explanation: parse_line_comment (string_to_list "
                                                   ;nxmcjdknfjdk
                   parse_to                                  ;nxmcb hjcbvhjcb:");;
                                           - : 'a list list * char list = ([[]; []; []], []) *)
-let nt = pack nt List.flatten in
-make_spaced nt;;
+let nt = pack nt (fun x-> ()) in
+ nt;;
 
 
 
-let parse_sexpCommentPrefix = make_spaced(word "#;");;
+
 (*let parse_sexp =  complete
 
 
@@ -440,9 +444,17 @@ let parse_unquoted_sp = pack parse_unquoted_sp (fun (e,s)-> Pair (Symbol("unquot
 (*
 let parse_taggedExp =        in
 *)
+let parse_sexp_comment =   (word "#;") in
+let parse_sexp_comment = caten parse_sexp_comment  parse_sexpr in
+let parse_sexp_comment = pack parse_sexp_comment (fun x-> ()) in
+let parse_comments = disj_list ([parse_whitespaces; parse_line_comment; parse_sexp_comment]) in
+let parse_comments = star parse_comments in
+(*let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in*)
+
 (*let nt = disj_list ([parse_boolean ; parse_char ; (*parse_number*); parse_string ; parse_symbol ; (*parse_list ; parse_dottedList ;*) parse_quote ;(* parse_quasiQuoted ; parse_unquoted; parse_unquoted_sp ; parse_taggedExp*)]) in*)
-let nt = disj_list ([parse_boolean ; parse_char ; parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList]) in
-(make_spaced nt) ch_lst;;
+let nt = disj_list ([parse_boolean ; parse_char ; parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList ]) in
+( make_paired parse_comments parse_comments nt) ch_lst;;
+
 
 
 (*EXAMPLES:
