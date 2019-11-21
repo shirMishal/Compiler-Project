@@ -80,6 +80,24 @@ let make_nt_parenthesized_expr nt =
   nt;;
 
 
+let parse_symbolChar = 
+let nt_capital = const (fun ch -> 'A' <= ch && ch <= 'Z') in
+let nt_letters = disj nt_capital (const (fun ch -> 'a' <= ch && ch <= 'z')) in 
+let nt = disj nt_letters (const (fun ch -> '0' <= ch && ch <= '9')) in
+let nt = disj_list ([nt; (char '!'); (char '$'); (char '^'); (char '*'); (char '-'); (char '_'); (char '='); (char '+'); (char '<'); (char '>'); (char '/'); (char '?')]) in
+nt;;
+
+(*parse_symbol (string_to_list "hbGJNJ123^!#{ mnc mmc xk");;
+- : string * char list =
+("hbgjnj123^!*",
+ ['#'; '{'; ' '; 'm'; 'n'; 'c'; ' '; 'm'; 'm'; 'c'; ' '; 'x'; 'k'])
+ *)
+let parse_symbol = 
+let nt = plus parse_symbolChar  in
+let nt = pack nt (fun x-> Symbol(list_to_string(List.map lowercase_ascii (x)))) in
+nt;;
+
+
 let parse_minus = char_ci '-';;
 let parse_plus = char_ci '+';;
 let math_sign_nt = disj (char_ci '-') (char_ci '+');;
@@ -199,7 +217,6 @@ let pow one mul a n =
       g (mul p p) (if i mod 2 = 1 then mul p x else x) (i/2)
   in
   g a one n) in
-let base = 10 in
 let nt_as_integer = parse_decimal in
 let nt_as_integer = caten nt_as_integer (char_ci 'e') in
 let nt_as_integer = caten nt_as_integer parse_decimal in
@@ -232,6 +249,7 @@ let parse_boolean =
 let parse_true = make_word char_ci "#t" in
 let parse_false = make_word char_ci "#f" in
 let nt = disj parse_true parse_false in
+let nt = not_followed_by nt parse_symbol in
 let nt = pack nt make_boolean  in
 nt;;
 
@@ -255,7 +273,7 @@ shircb");;
 Exception: PC.X_no_match. *)
 let parse_comment_endinput = 
 let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
-let nt = not_followed_by nt (char '\n') in 
+let nt = not_followed_by nt (char '\n') in  
 let nt = pack nt (fun x -> ()) in 
 nt;;
 (*
@@ -266,6 +284,7 @@ parse_line_comment (string_to_list "
                     ");;
 - : 'a list * char list = ([], [])
 *)
+(*
 let parse_line_comment = 
 let nt = disj parse_comment_endline parse_comment_endinput in
 let nt = star nt in (* explanation: parse_line_comment (string_to_list "                
@@ -275,36 +294,15 @@ let nt = star nt in (* explanation: parse_line_comment (string_to_list "
                                           - : 'a list list * char list = ([[]; []; []], []) *)
 let nt = pack nt (fun x-> ()) in
  nt;;
-
-
-
-
-(*let parse_sexp =  complete
-
-
-let parse_sexp_comment =
-let nt = caten parse_sexpCommentPrefix parse_sexp in
-let nt = pack nt (fun (,)-> nul) in
-make_spaced nt;;
 *)
+let parse_line_comment = 
+let nt = disj parse_comment_endline parse_comment_endinput in
+(*let nt = pack nt (fun x-> ()) in*)
+ nt;;
 
 
-let parse_symbolChar = 
-let nt_capital = const (fun ch -> 'A' <= ch && ch <= 'Z') in
-let nt_letters = disj nt_capital (const (fun ch -> 'a' <= ch && ch <= 'z')) in 
-let nt = disj nt_letters (const (fun ch -> '0' <= ch && ch <= '9')) in
-let nt = disj_list ([nt; (char '!'); (char '$'); (char '^'); (char '*'); (char '-'); (char '_'); (char '='); (char '+'); (char '<'); (char '>'); (char '/'); (char '?')]) in
-nt;;
 
-(*parse_symbol (string_to_list "hbGJNJ123^!#{ mnc mmc xk");;
-- : string * char list =
-("hbgjnj123^!*",
- ['#'; '{'; ' '; 'm'; 'n'; 'c'; ' '; 'm'; 'm'; 'c'; ' '; 'x'; 'k'])
- *)
-let parse_symbol = 
-let nt = plus parse_symbolChar  in
-let nt = pack nt (fun x-> Symbol(list_to_string(List.map lowercase_ascii (x)))) in
-nt;;
+
 
  (*
 let p  = make_nt_metaChar 'N';; val p : char list -> char * char list = <fun>
@@ -412,10 +410,10 @@ let parse_parenthesized_expr nt = make_paired (make_spaced (char '(')) (make_spa
 
 
 
-let check_tag_expression symbol sexp =
+let rec check_tag_expression symbol sexp =
 match sexp with
-| Pair(left, right) -> check_tag_expression(left) || check_tag_expression(right)
-| TaggedSexpr(sring, sexp) -> string = symbol || check_tag_expression(sexp)
+| Pair(left, right) -> (check_tag_expression symbol left) || (check_tag_expression symbol right)
+| TaggedSexpr(string, sexp) -> string = symbol || (check_tag_expression symbol sexp)
 | _ -> false;;
 
 (*parse_sexpr (string_to_list "(#f)rest");;
@@ -439,9 +437,9 @@ let parse_list = pack parse_list (fun exp_lst-> List.fold_right (fun exp acc -> 
                                   )in
 let parse_dottedList = caten (make_spaced (char '(')) (plus(parse_sexpr)) in
 let parse_dottedList = pack parse_dottedList (fun (_,s)-> s) in           
-let parse_dottedList = caten parse_dottedList (make_spaced (word "."))  in
+let parse_dottedList = caten parse_dottedList (word ".")  in
 let parse_dottedList = pack parse_dottedList (fun (s,_)-> s) in
-let parse_dottedList = caten (caten parse_dottedList (parse_sexpr)) (make_spaced (char ')')) in
+let parse_dottedList = caten (caten parse_dottedList (parse_sexpr))  (char ')') in
 let parse_dottedList = pack parse_dottedList (fun (s,_)-> s) in
 let parse_dottedList = pack parse_dottedList (fun (exp_lst, last_exp) -> List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 exp_lst 
@@ -467,22 +465,22 @@ let parse_unquoted_sp = pack parse_unquoted_sp (fun (e,s)-> Pair (Symbol("unquot
 let parse_taggedExp =        in
 *)
 let parse_sexp_comment =   (word "#;") in
-let parse_sexp_comment = caten parse_sexp_comment  parse_sexpr in
+let parse_sexp_comment = caten parse_sexp_comment parse_sexpr in
 let parse_sexp_comment = pack parse_sexp_comment (fun x-> ()) in
-let parse_comments = disj_list ([parse_whitespaces; parse_line_comment; parse_sexp_comment]) in
+let parse_comments = disj_list ([parse_whitespaces; parse_sexp_comment; parse_line_comment]) in
 let parse_comments = star parse_comments in
-(*let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in*)
+let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in
 
 let parse_taggedExp =  parse_tag in
-let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexp)) in   
+let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexpr)) in   
 let parse_taggedExp = pack parse_taggedExp (fun (tag, maybe_exp) -> 
                   match maybe_exp with
                   | None -> TagRef(tag)
-                  | Some(eq, sexp) -> if (check_tag_expression(tag sexp)) then TaggedSexpr(tag, sexp) else raise X_no_match)
+                  | Some(eq, sexp) -> if (check_tag_expression tag sexp) then TaggedSexpr(tag, sexp) else raise X_no_match)
 in
 (*let nt = disj_list ([parse_boolean ; parse_char ; (*parse_number*); parse_string ; parse_symbol ; (*parse_list ; parse_dottedList ;*) parse_quote ;(* parse_quasiQuoted ; parse_unquoted; parse_unquoted_sp ; parse_taggedExp*)]) in*)
-let nt = disj_list ([parse_boolean ; parse_char ; parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList ]) in
-make_paired (parse_comments) (parse_comments) nt ch_lst;;
+let nt = disj_list ([parse_boolean ; parse_char ; nt_number ;parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList; parse_taggedExp]) in
+make_parse_comment nt ch_lst;;
 
 
 
