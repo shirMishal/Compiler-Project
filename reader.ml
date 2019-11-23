@@ -34,23 +34,6 @@ let rec sexpr_eq s1 s2 =
   | TagRef(name1), TagRef(name2) -> name1 = name2
   | _ -> false;;
   
-module Reader: sig
-  val read_sexpr : string -> sexpr
-  val read_sexprs : string -> sexpr list
-end
-= struct
-let normalize_scheme_symbol str =
-  let s = string_to_list str in
-  if (andmap
-	(fun ch -> (ch = (lowercase_ascii ch)))
-	s) then str
-  else Printf.sprintf "|%s|" str;;
-
-let read_sexpr string = raise X_not_yet_implemented ;;
-
-let read_sexprs string = raise X_not_yet_implemented;;
-  
-end;; (* struct Reader *)
 
 
 open PC;;
@@ -493,3 +476,24 @@ utop # parse_sexpr (string_to_list "  ,@  #f  rest");;
 (Pair (Symbol "unquote-splicing", Pair (Bool false, Nil)),
  ['r'; 'e'; 's'; 't'])
  *)
+
+  let extract_AST(ast,rest) = ast;;
+
+  module Reader: sig
+  val read_sexpr : string -> sexpr
+  val read_sexprs : string -> sexpr list
+end
+= struct
+let normalize_scheme_symbol str =
+  let s = string_to_list str in
+  if (andmap
+	(fun ch -> (ch = (lowercase_ascii ch)))
+	s) then str
+  else Printf.sprintf "|%s|" str;;
+
+let read_sexpr string = extract_AST (parse_sexpr (string_to_list string)) ;;
+(*raise X_not_yet_implemented ;;*)
+
+let read_sexprs string = extract_AST ((star parse_sexpr) (string_to_list string)) ;;(*raise X_not_yet_implemented;;*)
+  
+end;; (* struct Reader *)
