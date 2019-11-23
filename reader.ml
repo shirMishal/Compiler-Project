@@ -69,15 +69,6 @@ let make_paired nt_left nt_right nt =
 let make_spaced nt =
   make_paired (star nt_whitespace) (star nt_whitespace) nt;;
 
-let make_nt_parenthesized_expr nt =
-  let nt1 = make_paired (make_spaced (char '(')) 
-			(make_spaced (char ')')) nt in
-  let nt2 = make_paired (make_spaced (char '[')) 
-			(make_spaced (char ']')) nt in
-  let nt3 = make_paired (make_spaced (char '{'))
-			(make_spaced (char '}')) nt in
-  let nt = disj nt1 (disj nt2 nt3) in
-  nt;;
 
 
 let parse_symbolChar = 
@@ -254,28 +245,14 @@ let nt = pack nt make_boolean  in
 nt;;
 
 let parse_whitespaces = pack nt_whitespace (fun x-> ());;
-(*optional : add spaced without \n caracter around char';'
-let parse_comment_endline = 
-let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
-let nt = plus nt in
-let nt = make_spaced nt in
-let nt = pack nt (fun x -> []) in 
-nt;;
-*)
-let parse_comment_endline = 
-let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
-let nt = pack nt (fun x -> ()) in 
-nt;;
+
+
 (*parse_comment_endinput (string_to_list "; jfcvnd   njvn k ndkllf     ");;
 - : 'a list * char list = ([], [])
 parse_comment_endinput (string_to_list "; hhhhhh 
 shircb");;
 Exception: PC.X_no_match. *)
-let parse_comment_endinput = 
-let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
-let nt = not_followed_by nt (char '\n') in  
-let nt = pack nt (fun x -> ()) in 
-nt;;
+
 (*
 parse_line_comment (string_to_list "                
 ;   ncxjnjckjkknck\"
@@ -295,14 +272,37 @@ let nt = star nt in (* explanation: parse_line_comment (string_to_list "
 let nt = pack nt (fun x-> ()) in
  nt;;
 *)
+
+let parse_comment_endline = 
+let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
+let nt = pack nt (fun x -> ()) in 
+nt;;
+(*
+let parse_comment_endinput = 
+let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
+let nt = not_followed_by nt (char '\n') in  
+let nt = pack nt (fun x -> ()) in 
+nt;;
+*)
+let parse_comment_endinput =
+let nt_end =  disj (pack nt_end_of_input (fun _ -> ())) (pack (char '\n') (fun _ -> ())) in
+let nt = diff nt_any nt_end in
+let nt = make_paired (char ';') (nt_end) (star nt) in
+let nt = pack nt (fun x -> ()) in 
+nt;;
+
 let parse_line_comment = 
-let nt = disj parse_comment_endline parse_comment_endinput in
+let nt = disj  parse_comment_endinput parse_comment_endline in
 (*let nt = pack nt (fun x-> ()) in*)
  nt;;
 
-
-
-
+(*
+let parse_line_comment =
+let nt_end = disj (pack nt_end_of_input (fun _ -> ())) (pack (char '\n') (fun _ -> ())) in
+let nt = make_paired  (char ';') (star(const(fun x-> Char.code x<> 10))) nt_end in
+let nt = pack nt (fun _ -> ()) in
+nt;;
+*)
 
  (*
 let p  = make_nt_metaChar 'N';; val p : char list -> char * char list = <fun>
@@ -426,20 +426,27 @@ let parse_list = pack parse_list (fun exp_lst-> List.fold_right (fun exp acc -> 
                                   )in
                                   *)
 let rec parse_sexpr ch_lst = (*///TODO :wrap parse list and where () and expr parser *)
-let parse_list = caten (make_spaced (char '(')) (star(parse_sexpr)) in
+let parse_sexp_comment =   (word "#;") in
+let parse_sexp_comment = caten parse_sexp_comment parse_sexpr in
+let parse_sexp_comment = pack parse_sexp_comment (fun x-> ()) in
+let parse_comments = disj_list ([parse_whitespaces; parse_sexp_comment; parse_line_comment]) in
+let parse_comments = star parse_comments in
+let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in
+
+let parse_list = caten (make_parse_comment (char '(')) (star(parse_sexpr)) in
 let parse_list = pack parse_list (fun (_,s)-> s) in
-let parse_list = caten parse_list (make_spaced (char ')'))  in
+let parse_list = caten parse_list (make_parse_comment (char ')'))  in
 let parse_list = pack parse_list (fun (s,_)-> s) in
 (*let parse_list = parse_parenthesized_expr (star (parse_sexpr)) in*)
 let parse_list = pack parse_list (fun exp_lst-> List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 exp_lst 
                                                                 Nil  
                                   )in
-let parse_dottedList = caten (make_spaced (char '(')) (plus(parse_sexpr)) in
+let parse_dottedList = caten (make_parse_comment (char '(')) (plus(parse_sexpr)) in
 let parse_dottedList = pack parse_dottedList (fun (_,s)-> s) in           
 let parse_dottedList = caten parse_dottedList (word ".")  in
 let parse_dottedList = pack parse_dottedList (fun (s,_)-> s) in
-let parse_dottedList = caten (caten parse_dottedList (parse_sexpr))  (char ')') in
+let parse_dottedList = caten (caten parse_dottedList (parse_sexpr))  (make_parse_comment(char ')')) in
 let parse_dottedList = pack parse_dottedList (fun (s,_)-> s) in
 let parse_dottedList = pack parse_dottedList (fun (exp_lst, last_exp) -> List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 exp_lst 
@@ -461,15 +468,7 @@ let parse_unquoted = pack parse_unquoted (fun (e,s)-> Pair (Symbol("unquote") , 
 let parse_unquoted_sp =  make_spaced (word ",@") in
 let parse_unquoted_sp = caten parse_unquoted_sp parse_sexpr in
 let parse_unquoted_sp = pack parse_unquoted_sp (fun (e,s)-> Pair (Symbol("unquote-splicing") , Pair(s,Nil))) in
-(*
-let parse_taggedExp =        in
-*)
-let parse_sexp_comment =   (word "#;") in
-let parse_sexp_comment = caten parse_sexp_comment parse_sexpr in
-let parse_sexp_comment = pack parse_sexp_comment (fun x-> ()) in
-let parse_comments = disj_list ([parse_whitespaces; parse_sexp_comment; parse_line_comment]) in
-let parse_comments = star parse_comments in
-let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in
+
 
 let parse_taggedExp =  parse_tag in
 let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexpr)) in   
@@ -478,7 +477,7 @@ let parse_taggedExp = pack parse_taggedExp (fun (tag, maybe_exp) ->
                   | None -> TagRef(tag)
                   | Some(eq, sexp) -> if (check_tag_expression tag sexp) then TaggedSexpr(tag, sexp) else raise X_no_match)
 in
-(*let nt = disj_list ([parse_boolean ; parse_char ; (*parse_number*); parse_string ; parse_symbol ; (*parse_list ; parse_dottedList ;*) parse_quote ;(* parse_quasiQuoted ; parse_unquoted; parse_unquoted_sp ; parse_taggedExp*)]) in*)
+
 let nt = disj_list ([parse_boolean ; parse_char ; nt_number ;parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList; parse_taggedExp]) in
 make_parse_comment nt ch_lst;;
 
