@@ -279,13 +279,7 @@ let nt = disj  parse_comment_endinput parse_comment_endline in
 (*let nt = pack nt (fun x-> ()) in*)
  nt;;
 
-(*
-let parse_line_comment =
-let nt_end = disj (pack nt_end_of_input (fun _ -> ())) (pack (char '\n') (fun _ -> ())) in
-let nt = make_paired  (char ';') (star(const(fun x-> Char.code x<> 10))) nt_end in
-let nt = pack nt (fun _ -> ()) in
-nt;;
-*)
+
 
  (*
 let p  = make_nt_metaChar 'N';; val p : char list -> char * char list = <fun>
@@ -362,6 +356,7 @@ let nt = plus parse_symbolChar  in
 let nt = pack nt (fun x-> list_to_string(List.map lowercase_ascii (x))) in
 make_spaced nt;;
 
+
 (* should be without space around #{ } 
 parse_tag (string_to_list "#{hi}=exp");;
 - : sexpr * char list = (TagRef "hi", ['='; 'e'; 'x'; 'p'])
@@ -375,18 +370,7 @@ let nt = make_paired  nt_l nt_r parse_symbol_for_tag in
 let nt = pack nt (fun s -> s) in
 nt;;
 
-(*
-let on_result nt f s =
-  let (e, s) = (nt s) in
-  (f ( e, s));;
 
-Symbol("quote")
-let parse_quote = 
-let nt = make_spaced (char (Char.chr 39))  in
-let nt = caten nt parse_sexpr in
-let nt = pack nt (fun (e,s)-> Pair (Symbol("quote") , Pair(s,Nil)))  in
-nt;;
-*)
 
 (*???? we should change the spaced into includes comments *)
 let parse_parenthesized_expr nt = make_paired (make_spaced (char '(')) (make_spaced (char ')')) nt ;;
@@ -458,7 +442,7 @@ let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexpr
 let parse_taggedExp = pack parse_taggedExp (fun (tag, maybe_exp) -> 
                   match maybe_exp with
                   | None -> TagRef(tag)
-                  | Some(eq, sexp) -> if (check_tag_expression tag sexp) then TaggedSexpr(tag, sexp) else raise X_no_match)
+                  | Some(eq, sexp) -> if (check_tag_expression tag sexp) then TaggedSexpr(tag, sexp) else raise X_this_should_not_happen)
 in
 
 let nt = disj_list ([parse_boolean ; parse_char ; nt_number ;parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList; parse_taggedExp]) in
