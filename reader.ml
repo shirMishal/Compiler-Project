@@ -412,10 +412,10 @@ let parse_parenthesized_expr nt = make_paired (make_spaced (char '(')) (make_spa
 
 
 
-let check_tag_expression symbol sexp =
+let rec check_tag_expression symbol sexp =
 match sexp with
-| Pair(left, right) -> check_tag_expression(left) || check_tag_expression(right)
-| TaggedSexpr(sring, sexp) -> string = symbol || check_tag_expression(sexp)
+| Pair(left, right) -> (check_tag_expression symbol left) || (check_tag_expression symbol right)
+| TaggedSexpr(string, sexp) -> string = symbol || (check_tag_expression symbol sexp)
 | _ -> false;;
 
 (*parse_sexpr (string_to_list "(#f)rest");;
@@ -466,22 +466,22 @@ let parse_unquoted_sp = pack parse_unquoted_sp (fun (e,s)-> Pair (Symbol("unquot
 (*
 let parse_taggedExp =        in
 *)
-let parse_sexp_comment =   (word "#;") in
-let parse_sexp_comment = caten parse_sexp_comment  parse_sexpr in
-let parse_sexp_comment = pack parse_sexp_comment (fun x-> ()) in
+let parse_sexp_comment = (word "#;") in
+let parse_sexp_comment = caten parse_sexp_comment parse_sexpr in
+let parse_sexp_comment = pack parse_sexp_comment (fun x -> ()) in
 let parse_comments = disj_list ([parse_whitespaces; parse_line_comment; parse_sexp_comment]) in
 let parse_comments = star parse_comments in
 (*let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in*)
 
 let parse_taggedExp =  parse_tag in
-let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexp)) in   
+let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexpr)) in   
 let parse_taggedExp = pack parse_taggedExp (fun (tag, maybe_exp) -> 
                   match maybe_exp with
                   | None -> TagRef(tag)
-                  | Some(eq, sexp) -> if (check_tag_expression(tag sexp)) then TaggedSexpr(tag, sexp) else raise X_no_match)
+                  | Some(eq, sexp) -> if (check_tag_expression tag sexp) then (TaggedSexpr(tag, sexp)) else raise X_no_match)
 in
 (*let nt = disj_list ([parse_boolean ; parse_char ; (*parse_number*); parse_string ; parse_symbol ; (*parse_list ; parse_dottedList ;*) parse_quote ;(* parse_quasiQuoted ; parse_unquoted; parse_unquoted_sp ; parse_taggedExp*)]) in*)
-let nt = disj_list ([parse_boolean ; parse_char ; parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList ]) in
+let nt = disj_list ([parse_boolean ; parse_char ; parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList; parse_taggedExp]) in
 make_paired (parse_comments) (parse_comments) nt ch_lst;;
 
 
