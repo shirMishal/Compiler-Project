@@ -159,21 +159,32 @@ in nt;;
 
 
 let parse_float =
-let base = 10 in 
-let nt = parse_to_number base in
+let nt = (disj (char '-') (char '+')) in
+let nt = maybe nt in
+let nt = caten nt (plus (nt_all_digits)) in
 let nt = caten nt (char_ci '.') in
 let nt = pack nt (fun (e, _) -> e) in
 let nt_right = make_nt_digit '0' '9' 0 in
 let nt_right = plus nt_right in
 let nt = caten nt nt_right in
-let nt = pack nt (fun number ->
-                  match number with
-                  | (left, right) -> let sign = if (left < 0) then ( -. ) else ( +. ) in
-                                     let right = List.map (fun int -> float_of_int int) right in
-                  (float_of_int left) +. List.fold_right (fun a b -> (sign (b /. 10.0) (a /. 10.0))) right 0.0) in
-                  nt;;
+let nt = pack nt (fun ((sign_ch, left_of_dot), right_of_dot) ->
+                  if (
+                    (ormap (fun digit -> digit >= 10) left_of_dot) || (ormap (fun digit -> digit >= 10) right_of_dot)
+                  ) 
+                  then raise X_no_match
+                  else let mult = (match sign_ch with
+                  | Some '-' -> -1
+                  | Some '+' -> 1
+                  | None -> 1
+                  | _ -> raise X_this_should_not_happen) in 
+                  let right = List.map (fun int -> float_of_int int) right_of_dot in
+                  let left_of_dot = List.map (fun int -> float_of_int int) left_of_dot in
+                  let left = List.fold_left (fun a b -> a *. 10. +. b) 0.0 left_of_dot in
+                  let number = left +. List.fold_right (fun a b  -> ( (b /. 10.0) +. (a /. 10.0))) right 0.0 in
+                  number *. (float_of_int mult)) in
+                  nt ;;
 
-
+                  
 (*val int : char list = ['-'; '0'; '0'; '0'; '0'; '0'; '1'; '2']
 # parse_integer int;;
 - : int * char list = (-12, [])
@@ -209,16 +220,23 @@ let pow one mul a n =
       g (mul p p) (if i mod 2 = 1 then mul p x else x) (i/2)
   in
   g a one n) in
-let nt_as_integer = parse_decimal in
-let nt_as_integer = caten nt_as_integer (char_ci 'e') in
-let nt_as_integer = caten nt_as_integer parse_decimal in
-let nt_as_integer = pack nt_as_integer (fun ((coefficient, char_e), exponent) ->
-                                        Number(Int(coefficient * (pow 1 ( * ) 10 exponent)))) in
 let nt_as_float = parse_float in
 let nt_as_float = caten nt_as_float (char_ci 'e') in
 let nt_as_float = caten nt_as_float parse_decimal in
 let nt_as_float = pack nt_as_float (fun ((coefficient, char_e), exponent) ->
-                                    Number(Float(coefficient *. (pow 1. ( *. ) 10. exponent)))) in
+                                    let right_part = if exponent >= 0
+                                    then (pow 1. ( *. ) 10. exponent)
+                                    else (1. /. (pow 1. ( *. ) 10. (-1 * exponent))) in
+                                    Number(Float(coefficient *. right_part))) in
+let nt_as_integer = parse_decimal in
+let nt_as_integer = caten nt_as_integer (char_ci 'e') in
+let nt_as_integer = caten nt_as_integer parse_decimal in
+let nt_as_integer = pack nt_as_integer (fun ((coefficient, char_e), exponent) ->
+                                    let coefficient = float_of_int coefficient in
+                                    let right_part = if exponent >= 0
+                                    then (pow 1. ( *. ) 10. exponent)
+                                    else (1. /. (pow 1. ( *. ) 10. (-1 * exponent))) in
+                                    Number(Float(coefficient *. right_part))) in
 let nt = disj nt_as_float nt_as_integer in 
 nt;;
 
