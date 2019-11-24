@@ -34,23 +34,6 @@ let rec sexpr_eq s1 s2 =
   | TagRef(name1), TagRef(name2) -> name1 = name2
   | _ -> false;;
   
-module Reader: sig
-  val read_sexpr : string -> sexpr
-  val read_sexprs : string -> sexpr list
-end
-= struct
-let normalize_scheme_symbol str =
-  let s = string_to_list str in
-  if (andmap
-	(fun ch -> (ch = (lowercase_ascii ch)))
-	s) then str
-  else Printf.sprintf "|%s|" str;;
-
-let read_sexpr string = raise X_not_yet_implemented ;;
-
-let read_sexprs string = raise X_not_yet_implemented;;
-  
-end;; (* struct Reader *)
 
 
 open PC;;
@@ -69,15 +52,24 @@ let make_paired nt_left nt_right nt =
 let make_spaced nt =
   make_paired (star nt_whitespace) (star nt_whitespace) nt;;
 
-let make_nt_parenthesized_expr nt =
-  let nt1 = make_paired (make_spaced (char '(')) 
-			(make_spaced (char ')')) nt in
-  let nt2 = make_paired (make_spaced (char '[')) 
-			(make_spaced (char ']')) nt in
-  let nt3 = make_paired (make_spaced (char '{'))
-			(make_spaced (char '}')) nt in
-  let nt = disj nt1 (disj nt2 nt3) in
-  nt;;
+
+
+let parse_symbolChar = 
+let nt_capital = const (fun ch -> 'A' <= ch && ch <= 'Z') in
+let nt_letters = disj nt_capital (const (fun ch -> 'a' <= ch && ch <= 'z')) in 
+let nt = disj nt_letters (const (fun ch -> '0' <= ch && ch <= '9')) in
+let nt = disj_list ([nt; (char '!'); (char '$'); (char '^'); (char '*'); (char '-'); (char '_'); (char '='); (char '+'); (char '<'); (char '>'); (char '/'); (char '?')]) in
+nt;;
+
+(*parse_symbol (string_to_list "hbGJNJ123^!#{ mnc mmc xk");;
+- : string * char list =
+("hbgjnj123^!*",
+ ['#'; '{'; ' '; 'm'; 'n'; 'c'; ' '; 'm'; 'm'; 'c'; ' '; 'x'; 'k'])
+ *)
+let parse_symbol = 
+let nt = plus parse_symbolChar  in
+let nt = pack nt (fun x-> Symbol(list_to_string(List.map lowercase_ascii (x)))) in
+nt;;
 
 
 let parse_minus = char_ci '-';;
@@ -105,6 +97,9 @@ let nt_sign = disj (char_ci '-') (char_ci '+') in
 let nt_sign = maybe nt_sign in
 let nt = caten nt_sign nt in
 let nt = pack nt (fun tuple ->
+                  if (ormap (fun digit -> digit >= base) ((fun (_, e) -> e) tuple))
+                  then raise X_no_match 
+                  else
                   (match tuple with
                   | (None, digits) -> List.fold_left  (fun a b -> base * a + b) 0 digits
                   | (Some ch, digits) ->  match ch with
@@ -136,18 +131,29 @@ let nt = pack nt (fun number ->
 nt;;
 
 let nt_float =
-let base = 10 in
-let nt = parse_to_number base in
+let nt = (disj (char '-') (char '+')) in
+let nt = maybe nt in
+let nt = caten nt (plus (nt_all_digits)) in
 let nt = caten nt (char_ci '.') in
 let nt = pack nt (fun (e, _) -> e) in
 let nt_right = make_nt_digit '0' '9' 0 in
 let nt_right = plus nt_right in
 let nt = caten nt nt_right in
-let nt = pack nt (fun number ->
-                  match number with
-                  | (left, right) -> let sign = if (left < 0) then ( -. ) else ( +. ) in
-                  let right = List.map (fun int -> float_of_int int) right in
-                  (float_of_int left) +. List.fold_right (fun a b  -> (sign (b /. 10.0) (a /. 10.0))) right 0.0) in
+let nt = pack nt (fun ((sign_ch, left_of_dot), right_of_dot) ->
+                  if (
+                    (ormap (fun digit -> digit >= 10) left_of_dot) || (ormap (fun digit -> digit >= 10) right_of_dot)
+                  ) 
+                  then raise X_no_match
+                  else let mult = (match sign_ch with
+                  | Some '-' -> -1
+                  | Some '+' -> 1
+                  | None -> 1
+                  | _ -> raise X_this_should_not_happen) in 
+                  let right = List.map (fun int -> float_of_int int) right_of_dot in
+                  let left_of_dot = List.map (fun int -> float_of_int int) left_of_dot in
+                  let left = List.fold_left (fun a b -> a *. 10. +. b) 0.0 left_of_dot in
+                  let number = left +. List.fold_right (fun a b  -> ( (b /. 10.0) +. (a /. 10.0))) right 0.0 in
+                  number *. (float_of_int mult)) in
 let nt = pack nt (fun float -> Number(Float(float)))
 in nt;;
 
@@ -180,12 +186,16 @@ let nt = (caten parse_decimal (char_ci 'r')) in
 let nt = caten nt (plus nt_all_digits) in
 let nt = caten nt (maybe (caten (char_ci '.') (plus nt_all_digits))) in
 let nt = pack nt (fun (((base, char_r), left_of_dot), x) -> 
-                let left_number = List.fold_left (fun a b -> base * a + b) 0 left_of_dot in
+                if (ormap (fun digit -> digit >= base) left_of_dot)
+                then raise X_no_match
+                else let left_number = List.fold_left (fun a b -> base * a + b) 0 left_of_dot in
                 match x with
-                | Some ('.', right_of_dot) ->  let right_dot_as_float = List.map float_of_int right_of_dot  in
+                | Some ('.', right_of_dot) -> if (ormap (fun digit -> digit >= base) right_of_dot) then raise X_no_match
+                else let right_dot_as_float = List.map float_of_int right_of_dot in
                           let base_float = float_of_int base in
                           let left_number_float = (float_of_int left_number) in
-                          Number (Float (left_number_float +. (List.fold_right (fun a b -> a /. base_float +. b /. base_float) right_dot_as_float 0.0)))
+                          let sign = (if left_number_float < 0. then ( -. ) else ( +. )) in
+                          Number (Float(sign left_number_float  (List.fold_right (fun a b -> a /. base_float +. b /. base_float) right_dot_as_float 0.0)))
                 | None -> Number (Int(left_number))
                 | _ -> raise X_this_should_not_happen)
                 in nt;;
@@ -199,7 +209,6 @@ let pow one mul a n =
       g (mul p p) (if i mod 2 = 1 then mul p x else x) (i/2)
   in
   g a one n) in
-let base = 10 in
 let nt_as_integer = parse_decimal in
 let nt_as_integer = caten nt_as_integer (char_ci 'e') in
 let nt_as_integer = caten nt_as_integer parse_decimal in
@@ -232,32 +241,19 @@ let parse_boolean =
 let parse_true = make_word char_ci "#t" in
 let parse_false = make_word char_ci "#f" in
 let nt = disj parse_true parse_false in
+let nt = not_followed_by nt parse_symbol in
 let nt = pack nt make_boolean  in
 nt;;
 
 let parse_whitespaces = pack nt_whitespace (fun x-> ());;
-(*optional : add spaced without \n caracter around char';'
-let parse_comment_endline = 
-let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
-let nt = plus nt in
-let nt = make_spaced nt in
-let nt = pack nt (fun x -> []) in 
-nt;;
-*)
-let parse_comment_endline = 
-let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
-let nt = pack nt (fun x -> ()) in 
-nt;;
+
+
 (*parse_comment_endinput (string_to_list "; jfcvnd   njvn k ndkllf     ");;
 - : 'a list * char list = ([], [])
 parse_comment_endinput (string_to_list "; hhhhhh 
 shircb");;
 Exception: PC.X_no_match. *)
-let parse_comment_endinput = 
-let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
-let nt = not_followed_by nt (char '\n') in 
-let nt = pack nt (fun x -> ()) in 
-nt;;
+
 (*
 parse_line_comment (string_to_list "                
 ;   ncxjnjckjkknck\"
@@ -266,6 +262,7 @@ parse_line_comment (string_to_list "
                     ");;
 - : 'a list * char list = ([], [])
 *)
+(*
 let parse_line_comment = 
 let nt = disj parse_comment_endline parse_comment_endinput in
 let nt = star nt in (* explanation: parse_line_comment (string_to_list "                
@@ -275,36 +272,32 @@ let nt = star nt in (* explanation: parse_line_comment (string_to_list "
                                           - : 'a list list * char list = ([[]; []; []], []) *)
 let nt = pack nt (fun x-> ()) in
  nt;;
-
-
-
-
-(*let parse_sexp =  complete
-
-
-let parse_sexp_comment =
-let nt = caten parse_sexpCommentPrefix parse_sexp in
-let nt = pack nt (fun (,)-> nul) in
-make_spaced nt;;
 *)
 
-
-let parse_symbolChar = 
-let nt_capital = const (fun ch -> 'A' <= ch && ch <= 'Z') in
-let nt_letters = disj nt_capital (const (fun ch -> 'a' <= ch && ch <= 'z')) in 
-let nt = disj nt_letters (const (fun ch -> '0' <= ch && ch <= '9')) in
-let nt = disj_list ([nt; (char '!'); (char '$'); (char '^'); (char '*'); (char '-'); (char '_'); (char '='); (char '+'); (char '<'); (char '>'); (char '/'); (char '?')]) in
+let parse_comment_endline = 
+let nt = make_paired (char ';') (char '\n') (star(const(fun x-> Char.code x<> 10))) in
+let nt = pack nt (fun x -> ()) in 
+nt;;
+(*
+let parse_comment_endinput = 
+let nt = caten (char ';') (star(const(fun x-> Char.code x<> 10))) in
+let nt = not_followed_by nt (char '\n') in  
+let nt = pack nt (fun x -> ()) in 
+nt;;
+*)
+let parse_comment_endinput =
+let nt_end =  disj (pack nt_end_of_input (fun _ -> ())) (pack (char '\n') (fun _ -> ())) in
+let nt = diff nt_any nt_end in
+let nt = make_paired (char ';') (nt_end) (star nt) in
+let nt = pack nt (fun x -> ()) in 
 nt;;
 
-(*parse_symbol (string_to_list "hbGJNJ123^!#{ mnc mmc xk");;
-- : string * char list =
-("hbgjnj123^!*",
- ['#'; '{'; ' '; 'm'; 'n'; 'c'; ' '; 'm'; 'm'; 'c'; ' '; 'x'; 'k'])
- *)
-let parse_symbol = 
-let nt = plus parse_symbolChar  in
-let nt = pack nt (fun x-> Symbol(list_to_string(List.map lowercase_ascii (x)))) in
-nt;;
+let parse_line_comment = 
+let nt = disj  parse_comment_endinput parse_comment_endline in
+(*let nt = pack nt (fun x-> ()) in*)
+ nt;;
+
+
 
  (*
 let p  = make_nt_metaChar 'N';; val p : char list -> char * char list = <fun>
@@ -381,6 +374,7 @@ let nt = plus parse_symbolChar  in
 let nt = pack nt (fun x-> list_to_string(List.map lowercase_ascii (x))) in
 make_spaced nt;;
 
+
 (* should be without space around #{ } 
 parse_tag (string_to_list "#{hi}=exp");;
 - : sexpr * char list = (TagRef "hi", ['='; 'e'; 'x'; 'p'])
@@ -394,18 +388,7 @@ let nt = make_paired  nt_l nt_r parse_symbol_for_tag in
 let nt = pack nt (fun s -> s) in
 nt;;
 
-(*
-let on_result nt f s =
-  let (e, s) = (nt s) in
-  (f ( e, s));;
 
-Symbol("quote")
-let parse_quote = 
-let nt = make_spaced (char (Char.chr 39))  in
-let nt = caten nt parse_sexpr in
-let nt = pack nt (fun (e,s)-> Pair (Symbol("quote") , Pair(s,Nil)))  in
-nt;;
-*)
 
 (*???? we should change the spaced into includes comments *)
 let parse_parenthesized_expr nt = make_paired (make_spaced (char '(')) (make_spaced (char ')')) nt ;;
@@ -428,20 +411,27 @@ let parse_list = pack parse_list (fun exp_lst-> List.fold_right (fun exp acc -> 
                                   )in
                                   *)
 let rec parse_sexpr ch_lst = (*///TODO :wrap parse list and where () and expr parser *)
-let parse_list = caten (make_spaced (char '(')) (star(parse_sexpr)) in
+let parse_sexp_comment =   (word "#;") in
+let parse_sexp_comment = caten parse_sexp_comment parse_sexpr in
+let parse_sexp_comment = pack parse_sexp_comment (fun x-> ()) in
+let parse_comments = disj_list ([parse_whitespaces; parse_sexp_comment; parse_line_comment]) in
+let parse_comments = star parse_comments in
+let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in
+
+let parse_list = caten (make_parse_comment (char '(')) (star(parse_sexpr)) in
 let parse_list = pack parse_list (fun (_,s)-> s) in
-let parse_list = caten parse_list (make_spaced (char ')'))  in
+let parse_list = caten parse_list (make_parse_comment (char ')'))  in
 let parse_list = pack parse_list (fun (s,_)-> s) in
 (*let parse_list = parse_parenthesized_expr (star (parse_sexpr)) in*)
 let parse_list = pack parse_list (fun exp_lst-> List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 exp_lst 
                                                                 Nil  
                                   )in
-let parse_dottedList = caten (make_spaced (char '(')) (plus(parse_sexpr)) in
+let parse_dottedList = caten (make_parse_comment (char '(')) (plus(parse_sexpr)) in
 let parse_dottedList = pack parse_dottedList (fun (_,s)-> s) in           
-let parse_dottedList = caten parse_dottedList (make_spaced (word "."))  in
+let parse_dottedList = caten parse_dottedList (word ".")  in
 let parse_dottedList = pack parse_dottedList (fun (s,_)-> s) in
-let parse_dottedList = caten (caten parse_dottedList (parse_sexpr)) (make_spaced (char ')')) in
+let parse_dottedList = caten (caten parse_dottedList (parse_sexpr))  (make_parse_comment(char ')')) in
 let parse_dottedList = pack parse_dottedList (fun (s,_)-> s) in
 let parse_dottedList = pack parse_dottedList (fun (exp_lst, last_exp) -> List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 exp_lst 
@@ -463,26 +453,17 @@ let parse_unquoted = pack parse_unquoted (fun (e,s)-> Pair (Symbol("unquote") , 
 let parse_unquoted_sp =  make_spaced (word ",@") in
 let parse_unquoted_sp = caten parse_unquoted_sp parse_sexpr in
 let parse_unquoted_sp = pack parse_unquoted_sp (fun (e,s)-> Pair (Symbol("unquote-splicing") , Pair(s,Nil))) in
-(*
-let parse_taggedExp =        in
-*)
-let parse_sexp_comment = (word "#;") in
-let parse_sexp_comment = caten parse_sexp_comment parse_sexpr in
-let parse_sexp_comment = pack parse_sexp_comment (fun x -> ()) in
-let parse_comments = disj_list ([parse_whitespaces; parse_line_comment; parse_sexp_comment]) in
-let parse_comments = star parse_comments in
-(*let make_parse_comment p = make_paired (parse_comments) (parse_comments) p in*)
 
 let parse_taggedExp =  parse_tag in
 let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexpr)) in   
 let parse_taggedExp = pack parse_taggedExp (fun (tag, maybe_exp) -> 
                   match maybe_exp with
                   | None -> TagRef(tag)
-                  | Some(eq, sexp) -> if (check_tag_expression tag sexp) then (TaggedSexpr(tag, sexp)) else raise X_no_match)
+                  | Some(eq, sexp) -> if (check_tag_expression tag sexp) then TaggedSexpr(tag, sexp) else raise X_this_should_not_happen)
 in
-(*let nt = disj_list ([parse_boolean ; parse_char ; (*parse_number*); parse_string ; parse_symbol ; (*parse_list ; parse_dottedList ;*) parse_quote ;(* parse_quasiQuoted ; parse_unquoted; parse_unquoted_sp ; parse_taggedExp*)]) in*)
-let nt = disj_list ([parse_boolean ; parse_char ; parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList; parse_taggedExp]) in
-make_paired (parse_comments) (parse_comments) nt ch_lst;;
+
+let nt = disj_list ([parse_boolean ; parse_char ; nt_number ;parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList; parse_taggedExp]) in
+make_parse_comment nt ch_lst;;
 
 
 
@@ -496,3 +477,24 @@ utop # parse_sexpr (string_to_list "  ,@  #f  rest");;
 (Pair (Symbol "unquote-splicing", Pair (Bool false, Nil)),
  ['r'; 'e'; 's'; 't'])
  *)
+
+  let extract_AST(ast,rest) = ast;;
+
+  module Reader: sig
+  val read_sexpr : string -> sexpr
+  val read_sexprs : string -> sexpr list
+end
+= struct
+let normalize_scheme_symbol str =
+  let s = string_to_list str in
+  if (andmap
+	(fun ch -> (ch = (lowercase_ascii ch)))
+	s) then str
+  else Printf.sprintf "|%s|" str;;
+
+let read_sexpr string = extract_AST (parse_sexpr (string_to_list string)) ;;
+(*raise X_not_yet_implemented ;;*)
+
+let read_sexprs string = extract_AST ((star parse_sexpr) (string_to_list string)) ;;(*raise X_not_yet_implemented;;*)
+  
+end;; (* struct Reader *)
