@@ -58,7 +58,7 @@ let parse_symbolChar =
 let nt_capital = const (fun ch -> 'A' <= ch && ch <= 'Z') in
 let nt_letters = disj nt_capital (const (fun ch -> 'a' <= ch && ch <= 'z')) in 
 let nt = disj nt_letters (const (fun ch -> '0' <= ch && ch <= '9')) in
-let nt = disj_list ([nt; (char '!'); (char '$'); (char '^'); (char '*'); (char '-'); (char '_'); (char '='); (char '+'); (char '<'); (char '>'); (char '/'); (char '?')]) in
+let nt = disj_list ([nt; (char '!'); (char '$'); (char '^'); (char '*'); (char '-'); (char '_'); (char '='); (char '+'); (char '<'); (char '>'); (char '/'); (char '?');(char ':')]) in
 nt;;
 
 (*parse_symbol (string_to_list "hbGJNJ123^!#{ mnc mmc xk");;
@@ -475,9 +475,18 @@ let normalize_scheme_symbol str =
 	s) then str
   else Printf.sprintf "|%s|" str;;
 
-let read_sexpr string = extract_AST (parse_sexpr (string_to_list string)) ;;
-(*raise X_not_yet_implemented ;;*)
+let read_sexpr string = 
+let (ast,rest) = (parse_sexpr (string_to_list string)) in
+match rest with 
+| []-> ast
+| _-> raise X_this_should_not_happen;;
 
-let read_sexprs string = extract_AST ((star parse_sexpr) (string_to_list string)) ;;(*raise X_not_yet_implemented;;*)
+
+let read_sexprs string = 
+let (ast_lst,rest) = ((star parse_sexpr) (string_to_list string)) in
+match rest with 
+| []-> ast_lst
+| _-> raise X_this_should_not_happen;;
+
   
 end;; (* struct Reader *)
