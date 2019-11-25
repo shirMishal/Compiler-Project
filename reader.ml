@@ -259,7 +259,7 @@ let parse_boolean =
 let parse_true = make_word char_ci "#t" in
 let parse_false = make_word char_ci "#f" in
 let nt = disj parse_true parse_false in
-let nt = not_followed_by nt parse_symbol in
+(*let nt = not_followed_by nt parse_symbol in*)
 let nt = pack nt make_boolean  in
 nt;;
 
