@@ -1,10 +1,10 @@
 
 #use "pc.ml";;
-
 exception X_not_yet_implemented;;
 exception X_this_should_not_happen;;
   
 type tuple =
+
   | Int of int
   | Float of float;;
   
@@ -193,21 +193,31 @@ let nt_integer = make_nt_number 10;;
 
 
 let nt_radix = 
+let nt_initial = char '#' in
 let nt = (caten parse_decimal (char_ci 'r')) in
-let nt = caten nt (plus nt_all_digits) in
+let nt = (caten nt (maybe (disj (char '-') (char '+')))) in
+let nt = (caten nt (plus nt_all_digits)) in
 let nt = caten nt (maybe (caten (char_ci '.') (plus nt_all_digits))) in
-let nt = pack nt (fun (((base, char_r), left_of_dot), x) -> 
+let nt = caten nt_initial nt in
+let nt = pack nt (fun (_, e) -> e) in
+let nt = pack nt (fun ((((base, char_r), sign), left_of_dot), x) -> 
                 if (ormap (fun digit -> digit >= base) left_of_dot)
                 then raise X_no_match
-                else let left_number = List.fold_left (fun a b -> base * a + b) 0 left_of_dot in
+                else
+                let mult = match sign with
+                | Some '-' -> -1
+                | Some '+' -> +1
+                | None -> +1
+                | _ -> raise X_this_should_not_happen in
+                let left_number = List.fold_left (fun a b -> base * a + b) 0 left_of_dot in
+                let left_number = left_number in
                 match x with
                 | Some ('.', right_of_dot) -> if (ormap (fun digit -> digit >= base) right_of_dot) then raise X_no_match
                 else let right_dot_as_float = List.map float_of_int right_of_dot in
                           let base_float = float_of_int base in
                           let left_number_float = (float_of_int left_number) in
-                          let sign = (if left_number_float < 0. then ( -. ) else ( +. )) in
-                          Number (Float(sign left_number_float  (List.fold_right (fun a b -> a /. base_float +. b /. base_float) right_dot_as_float 0.0)))
-                | None -> Number (Int(left_number))
+                          Number (Float((float_of_int mult) *.(left_number_float +. (List.fold_right (fun a b -> a /. base_float +. b /. base_float) right_dot_as_float 0.0))))
+                | None -> Number (Int(left_number * mult))
                 | _ -> raise X_this_should_not_happen)
                 in nt;;
 
@@ -411,13 +421,28 @@ nt;;
 (*???? we should change the spaced into includes comments *)
 let parse_parenthesized_expr nt = make_paired (make_spaced (char '(')) (make_spaced (char ')')) nt ;;
 
+module SS = Set.Make(String);;
+
+let get_second (first, second) = second;;
+let get_first (first, second) = first;;
 
 
-let rec check_tag_expression symbol sexp =
+let rec check_tag_expression symbol_set sexp =
 match sexp with
-| Pair(left, right) -> (check_tag_expression symbol left) || (check_tag_expression symbol right)
-| TaggedSexpr(string, sexp) -> string = symbol || (check_tag_expression symbol sexp)
-| _ -> false;;
+| Pair(first, second) -> 
+  let symbols_in_first = (get_second (check_tag_expression symbol_set first)) in
+  let symbol_set = (SS.union symbol_set symbols_in_first) in
+  let symbol_set = (SS.union symbol_set (get_second (check_tag_expression symbol_set second))) in
+  (sexp, symbol_set)
+| TaggedSexpr(tag, sexpression) -> 
+  (if (SS.exists (fun string -> tag = string) symbol_set) 
+  then raise X_this_should_not_happen
+  else 
+  let symbol_set = (SS.add tag symbol_set) in
+  let symbol_set = (SS.union symbol_set (get_second (check_tag_expression symbol_set sexpression))) in 
+  (sexp, symbol_set))
+| _ -> (sexp, symbol_set);;
+
 
 (*parse_sexpr (string_to_list "(#f)rest");;
 - : sexpr * char list = (Pair (Bool false, Nil), ['r'; 'e'; 's'; 't'])
@@ -446,11 +471,11 @@ let parse_list = pack parse_list (fun exp_lst-> List.fold_right (fun exp acc -> 
                                                                 Nil  
                                   )in
 let parse_dottedList = caten (make_parse_comment (char '(')) (plus(parse_sexpr)) in
-let parse_dottedList = pack parse_dottedList (fun (_,s)-> s) in           
+let parse_dottedList = pack parse_dottedList (fun (_, s)-> s) in           
 let parse_dottedList = caten parse_dottedList (word ".")  in
-let parse_dottedList = pack parse_dottedList (fun (s,_)-> s) in
+let parse_dottedList = pack parse_dottedList (fun (s, _)-> s) in
 let parse_dottedList = caten (caten parse_dottedList (parse_sexpr))  (make_parse_comment(char ')')) in
-let parse_dottedList = pack parse_dottedList (fun (s,_)-> s) in
+let parse_dottedList = pack parse_dottedList (fun (s, _)-> s) in
 let parse_dottedList = pack parse_dottedList (fun (exp_lst, last_exp) -> List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 exp_lst 
                                                                 last_exp  
@@ -477,10 +502,12 @@ let parse_taggedExp = caten parse_taggedExp (maybe (caten (char '=') parse_sexpr
 let parse_taggedExp = pack parse_taggedExp (fun (tag, maybe_exp) -> 
                   match maybe_exp with
                   | None -> TagRef(tag)
-                  | Some(eq, sexp) -> if (check_tag_expression tag sexp) then TaggedSexpr(tag, sexp) else raise X_this_should_not_happen)
+                  | Some(eq, sexp) -> TaggedSexpr(tag, sexp))
 in
 
 let nt = disj_list ([parse_boolean ; parse_char ; nt_number ;parse_string ; parse_symbol ; parse_quoted ; parse_quasiQuoted; parse_unquoted; parse_unquoted_sp; parse_list; parse_dottedList; parse_taggedExp]) in
+let nt = pack nt (fun sexpression ->
+(get_first (check_tag_expression SS.empty sexpression))) in
 make_parse_comment nt ch_lst;;
 
 
@@ -511,17 +538,17 @@ let normalize_scheme_symbol str =
   else Printf.sprintf "|%s|" str;;
 
 let read_sexpr string = 
-let (ast,rest) = (parse_sexpr (string_to_list string)) in
+let (ast ,rest) = (parse_sexpr (string_to_list string)) in
 match rest with 
 | []-> ast
-| _-> raise X_this_should_not_happen;;
+| _-> raise X_no_match;;
 
 
 let read_sexprs string = 
 let (ast_lst,rest) = ((star parse_sexpr) (string_to_list string)) in
 match rest with 
 | []-> ast_lst
-| _-> raise X_this_should_not_happen;;
+| _-> raise X_no_match;;
 
   
 end;; (* struct Reader *)
