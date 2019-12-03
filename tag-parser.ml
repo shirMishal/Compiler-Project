@@ -66,15 +66,20 @@ let tag_parse_expressions sexpr = raise X_not_yet_implemented;;
   
 end;; (* struct Tag_Parser *)
 
-let tag_parse_const sexp = 
+
+
+let rec tag_parse_const_helper sexp = 
 match sexp with 
-| Bool(_) -> Const (Sexpr (sexp))
-| Char(_) -> Const (Sexpr (sexp))
-| Number(_) -> Const (Sexpr (sexp))
-| String(_) -> Const (Sexpr (sexp))
-| TagRef(_) -> Const (Sexpr (sexp))
-| Pair (Symbol ("quote"),cdr) -> Const (Sexpr (cdr))
-| TaggedSexpr( name ,s )->  match s with
-                            | Pair((Symbol("quote"),Pair(a,b)), tag_value) -> Const(Sexpr(TaggedSexpr(name, tag_value)))
-                            | _ -> Const(Sexpr(sexp))
+| Bool(_) -> sexp
+| Char(_) -> sexp
+| Number(_) -> sexp
+| String(_) -> sexp
+| TagRef(_) -> sexp
+| Pair (Symbol ("quote"), cdr) -> (match cdr with 
+                                              | Pair(something, Nil) -> something
+                                              | _ -> cdr)
+| TaggedSexpr(name, tag_value)->  let tag_value_parsed = (tag_parse_const_helper tag_value) in
+TaggedSexpr(name, tag_value_parsed)
 | _-> raise X_syntax_error;;
+
+let tag_parse_const sexp = Const(Sexpr((tag_parse_const_helper sexp)))
