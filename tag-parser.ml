@@ -69,4 +69,12 @@ end;; (* struct Tag_Parser *)
 let tag_parse_const sexp = 
 match sexp with 
 | Bool(_) -> Const (Sexpr (sexp))
-|_-> raise X_syntax_error;;
+| Char(_) -> Const (Sexpr (sexp))
+| Number(_) -> Const (Sexpr (sexp))
+| String(_) -> Const (Sexpr (sexp))
+| TagRef(_) -> Const (Sexpr (sexp))
+| Pair (Symbol ("quote"),cdr) -> Const (Sexpr (cdr))
+| TaggedSexpr( name ,s )->  match s with
+                            | Pair((Symbol("quote"),Pair(a,b)), tag_value) -> Const(Sexpr(TaggedSexpr(name, tag_value)))
+                            | _ -> Const(Sexpr(sexp))
+| _-> raise X_syntax_error;;
