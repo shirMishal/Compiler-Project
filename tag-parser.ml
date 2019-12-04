@@ -59,15 +59,6 @@ let reserved_word_list =
 
 (* work on the tag parser starts here *)
 
-let tag_parse_expression sexpr = raise X_not_yet_implemented;;
-
-let tag_parse_expressions sexpr = raise X_not_yet_implemented;;
-
-  
-end;; (* struct Tag_Parser *)
-
-
-
 let rec tag_parse_const_helper sexp = 
 match sexp with 
 | Bool(_) -> sexp
@@ -79,7 +70,93 @@ match sexp with
                                               | Pair(something, Nil) -> something
                                               | _ -> cdr)
 | TaggedSexpr(name, tag_value)->  let tag_value_parsed = (tag_parse_const_helper tag_value) in
-TaggedSexpr(name, tag_value_parsed)
+                                                            TaggedSexpr(name, tag_value_parsed)
 | _-> raise X_syntax_error;;
 
-let tag_parse_const sexp = Const(Sexpr((tag_parse_const_helper sexp)))
+let tag_parse_const sexp = Const(Sexpr((tag_parse_const_helper sexp)));;
+
+let tag_parse_variable sexpression = 
+match sexpression with
+| Symbol(name) -> if (List.mem name reserved_word_list) then raise X_syntax_error else Var(name)
+| _ -> raise X_syntax_error;;
+
+let rec get_names_from_symbol_list symbol_list =
+match symbol_list with
+| Pair(Symbol(first_name), rest) -> first_name :: (get_names_from_symbol_list rest)
+| Symbol(name) -> [name]
+| Nil -> []
+| _ -> raise X_syntax_error;;
+
+let rec is_simple_arg_list list =
+  match list with
+  | Pair(_, Nil) -> true
+  | Symbol("vs") -> false
+  | Pair(_, rest) -> is_simple_arg_list rest
+  | _ -> raise X_syntax_error;;
+
+let all_but_last list =
+let rvrs = (List.rev list) in
+let rvrs = (List.tl rvrs) in
+(List.rev rvrs);;
+
+let rec flatten sexpr_pairs = 
+match sexpr_pairs with
+| Pair(first, Nil) -> [first]
+| Pair(first, rest) -> first :: (flatten rest)
+| anything_else -> [anything_else];; 
+
+let rec tag_parse_expression sexpr = 
+
+  let tag_parse_if_expression sexpression =
+    match sexpression with
+    | Pair(Symbol("if"), Pair(test_sexp, Pair(dit_sexp, maybe_dif_sexp))) -> 
+      let test = (tag_parse_expression test_sexp) in
+      let dit = (tag_parse_expression dit_sexp) in
+      let dif = (match maybe_dif_sexp with 
+                  | Pair(dif_sexp, Nil) -> (tag_parse_expression dif_sexp) 
+                  | Nil -> Const(Void)
+                  | _ -> raise X_syntax_error) in
+      If(test, dit, dif)
+    | _ -> raise X_syntax_error in 
+
+  let tag_parse_lambda_expression sexpression =
+    match sexpression with
+    | Pair(Symbol("lambda"), Pair(arg_list, exprs)) -> 
+      let body = tag_parse_expression (Pair(Symbol("begin"), exprs)) in
+      let is_simple = (is_simple_arg_list arg_list) in
+      let arg_list = (get_names_from_symbol_list arg_list) in
+      if (is_simple) then LambdaSimple(arg_list, body) else LambdaOpt((all_but_last arg_list), "vs", body)
+    | _ -> raise X_syntax_error in
+
+  let tag_parse_seq_expression sexpression =
+    match sexpression with 
+    | Pair(Symbol("begin"), sexprs) ->
+      (match sexprs with
+      | Pair(something, Nil) -> tag_parse_expression something
+      | Pair(first, rest) -> Seq((tag_parse_expressions (flatten sexprs))) (*  which will already be seq  *)
+      | Nil -> Const(Void)
+      | _ -> raise X_syntax_error (**thought that through - (begin . 1) is not legal thus the sexprs cannot be not a pair nor a Nil *))
+    | _ -> raise X_syntax_error in
+
+  try (tag_parse_seq_expression sexpr)
+  with X_syntax_error ->
+  try (tag_parse_lambda_expression sexpr)
+  with X_syntax_error ->
+  try (tag_parse_if_expression sexpr)
+  with X_syntax_error -> 
+  try (tag_parse_const sexpr)
+  with X_syntax_error ->
+  try  (tag_parse_variable sexpr)
+  with X_syntax_error -> raise X_not_yet_implemented
+and tag_parse_expressions sexpr = 
+(List.map tag_parse_expression sexpr);;
+
+let test_string_tag scheme_code =
+(tag_parse_expression (Reader.read_sexpr scheme_code));;
+  
+end;; (* struct Tag_Parser *)
+
+
+
+
+    
