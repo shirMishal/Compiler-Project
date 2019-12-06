@@ -89,22 +89,28 @@ match sexpr_pairs with
 | Pair(first, rest) -> first :: (flatten rest)
 | anything_else -> [anything_else];; 
 
-(*let cons_sexprs sexp1 sexp2 = 
-match sexp1 with
-| Pair(car, Nil) -> Pair(car, sexp2)
-| Pair()
 
 let rec quasiquote_expantion quasiqouted_sexp =
 match quasiqouted_sexp with
 | Pair(Symbol("unquote"), sexp) -> sexp
 | Pair(Symbol("unquote-splicing"), Pair(sexp, Nil)) -> raise X_syntax_error
-| Pair(Symbol("unquote-slicing"), Pair(car, cdr)) ->
-  (match car, cdr with
-  | Pair(Symbol("unquote-slicing"), sexpr), cdr -> *)
+| Pair(Symbol("unquote-slicing"), Pair(car, cdr)) -> Pair(Symbol("append"), Pair(car, (quasiquote_expantion cdr)))
+| Pair(car, cdr) -> Pair(Symbol("cons"), Pair((quasiquote_expantion car), (quasiquote_expantion cdr)))
+| Nil -> Pair(Symbol("quote"), Nil)
+| Symbol(name) -> Pair(Symbol("quote"), Pair(Symbol(name), Nil))
+| _ -> quasiqouted_sexp;;
 
 let rec tag_parse_expression sexpr = 
+  (* Macro expantions *)
+  let sexpr = 
 
+  (* Quasiquote-expantion *)
   match sexpr with
+  | Pair(Symbol("quasiquote"), quasiquoted_sexp) -> (quasiquote_expantion quasiquoted_sexp)
+
+  | _ -> sexpr
+
+  in match sexpr with
   (* Constant parser *)
   | Bool(_) -> Const(Sexpr(sexpr))
   | Char(_) -> Const(Sexpr(sexpr))
@@ -116,12 +122,12 @@ let rec tag_parse_expression sexpr =
       | Pair(something, Nil) -> Const(Sexpr(something))
       | _ -> Const(Sexpr(cdr)))
   | TaggedSexpr(name, tag_value) -> 
-    match tag_value with
+    (match tag_value with
       | Pair (Symbol ("quote"), cdr) -> 
         (match cdr with 
           | Pair(something, Nil) -> Const(Sexpr(something))
           | _ -> Const(Sexpr(cdr)))
-      | _ -> Const(Sexpr(tag_value))
+      | _ -> Const(Sexpr(tag_value)))
   
   (* Variable parser *)
   | Symbol(name) -> if (List.mem name reserved_word_list) then raise X_syntax_error else Var(name)
@@ -140,7 +146,7 @@ let rec tag_parse_expression sexpr =
   (* Lambda-expression parser *)
   | Pair(Symbol("lambda"), Pair(arg_list, exprs)) -> 
     (let body = tag_parse_expression (Pair(Symbol("begin"), exprs)) in
-    match arg_list with
+    (match arg_list with
     | Symbol(variadic_symbol) -> LambdaOpt([], variadic_symbol, body)
     | Pair(_, _) ->
       (let is_simple = (is_simple_arg_list arg_list) in
@@ -149,47 +155,49 @@ let rec tag_parse_expression sexpr =
       if (is_simple) 
       then LambdaSimple(arg_list, body) 
       else LambdaOpt((List.tl vs_at_front_arg_list), (List.hd vs_at_front_arg_list), body))
-    | _ -> raise X_syntax_error)
+    | _ -> raise X_syntax_error))
 
   (* Or-expression parser *)
   | Pair (Symbol("or"), args) -> Or (tag_parse_expressions (flatten (args)))
 
   (* Set-expression parser *)
   | Pair (Symbol("set!"), var_val_sexp) ->  
-    match var_val_sexp with
+    (match var_val_sexp with
       | Pair(var_sexp, Pair(val_sexp, Nil))-> Set (tag_parse_expression (var_sexp),
                                                           tag_parse_expression (val_sexp))
-      | _ -> raise X_syntax_error
+      | _ -> raise X_syntax_error)
 
   (* Define-expression parser *)
   | Pair (Symbol("define"), var_val_sexp) -> 
-    match var_val_sexp with
+    (match var_val_sexp with
       | Pair(var_sexp, Pair(val_sexp, Nil))-> 
         (let var_exp =  (tag_parse_expression (var_sexp)) in
-        match var_exp with 
+        (match var_exp with 
         | Var(x) -> Def (var_exp, tag_parse_expression (val_sexp))
-        | _ -> raise X_syntax_error)
-      | _ -> raise X_syntax_error
+        | _ -> raise X_syntax_error))
+      | _ -> raise X_syntax_error)
 
   (* Sequence-expression parser *)
   | Pair(Symbol("begin"), sexprs) ->
     (match sexprs with
-    | Pair(first, rest) -> match rest with
+    | Pair(first, rest) -> (match rest with
                           | Nil -> (tag_parse_expression first)
                           | Pair(_, _) -> (Seq(tag_parse_expressions (flatten sexprs)))
+                          | _ -> raise X_this_shouldnt_happen_error)
     | Nil -> Const(Void)
     | _ -> raise X_syntax_error) (* thought that through - (begin . 1) is not legal thus the sexprs cannot be not a pair nor a Nil *)
 
   (* Application-expression parser *)
   | Pair (first, rest) -> 
-            let op = match first with 
-                  | Symbol(op) -> 
-                      if (List.mem op reserved_word_list) 
-                      then raise X_this_shouldnt_happen_error (* we were supposed to parse all the reserved words containing expressions *)
-                      else (tag_parse_expression first)
-                  | _ -> (tag_parse_expression first) in
-            let args = (tag_parse_expressions (flatten rest)) in
-            Applic(op, args)
+    let op = 
+      (match first with 
+      | Symbol(op) -> 
+        if (List.mem op reserved_word_list) 
+        then raise X_this_shouldnt_happen_error (* we were supposed to parse all the reserved words containing expressions *)
+        else (tag_parse_expression first)
+      | _ -> (tag_parse_expression first)) in
+      let args = (tag_parse_expressions (flatten rest)) in
+      Applic(op, args)
   
   (* All parser failed  *)
   | _ -> raise X_syntax_error
