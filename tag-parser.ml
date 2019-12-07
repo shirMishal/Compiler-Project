@@ -62,6 +62,7 @@ let reserved_word_list =
 (* Help functions *)
 
 exception X_this_shouldnt_happen_error;;
+exception X_syntax_error_cond;;
 
 let rec get_names_from_symbol_list symbol_list =
 match symbol_list with
@@ -100,6 +101,14 @@ match quasiqouted_sexp with
 | Symbol(name) -> Pair(Symbol("quote"), Pair(Symbol(name), Nil))
 | _ -> quasiqouted_sexp;;
 
+
+let rec cond_expantion cond_ribs_sexp = 
+match cond_ribs_sexp with
+|Pair(Pair(test1, then1), rest_ribs) ->  Pair (Symbol "if",Pair (test1, Pair (then1, Pair ((cond_expantion rest_ribs), Nil))))
+|Nil -> Nil
+|_ -> cond_ribs_sexp;;
+
+
 let rec tag_parse_expression sexpr = 
   (* Macro expantions *)
   let sexpr = 
@@ -107,8 +116,11 @@ let rec tag_parse_expression sexpr =
   (* Quasiquote-expantion *)
   match sexpr with
   | Pair(Symbol("quasiquote"), quasiquoted_sexp) -> (quasiquote_expantion quasiquoted_sexp)
-
+  | Pair (Symbol "cond", cond_ribs_sexp)-> (cond_expantion cond_ribs_sexp)
+(* and-expantion 
+  | Pair (Symbol "and", Nil)*)
   | _ -> sexpr
+
 
   in match sexpr with
   (* Constant parser *)
@@ -204,7 +216,8 @@ let rec tag_parse_expression sexpr =
 
 
 and tag_parse_expressions sexprs = 
-(List.map tag_parse_expression sexprs);;
+(List.map tag_parse_expression sexprs) 
+;;
 
   
 end;; (* struct Tag_Parser *)
