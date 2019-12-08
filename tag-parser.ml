@@ -49,7 +49,6 @@ module type TAG_PARSER = sig
   val tag_parse_expressions : sexpr list -> expr list
 
   (* to delete *)
-  val quasiquote_expantion : sexpr -> sexpr
 end;; (* signature TAG_PARSER *)
 
 module Tag_Parser : TAG_PARSER = struct
@@ -228,6 +227,10 @@ and tag_parse_expressions sexprs =
 
   
 end;; (* struct Tag_Parser *)
+ 
+ open Tag_Parser;;
 
+ let test_string code =
+let sexpr = (Reader.read_sexpr code) in (tag_parse_expression sexpr);;
 
     
