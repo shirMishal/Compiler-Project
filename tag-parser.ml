@@ -47,6 +47,9 @@ exception X_syntax_error;;
 module type TAG_PARSER = sig
   val tag_parse_expression : sexpr -> expr
   val tag_parse_expressions : sexpr list -> expr list
+
+  (* to delete *)
+  val quasiquote_expantion : sexpr -> sexpr
 end;; (* signature TAG_PARSER *)
 
 module Tag_Parser : TAG_PARSER = struct
@@ -61,7 +64,7 @@ let reserved_word_list =
 
 (* Help functions *)
 
-exception X_this_shouldnt_happen_error;;
+exception X_this_shouldnt_happen_error of string;;
 exception X_syntax_error_cond;;
 
 let rec get_names_from_symbol_list symbol_list =
@@ -93,18 +96,18 @@ match sexpr_pairs with
 
 let rec quasiquote_expantion quasiqouted_sexp =
 match quasiqouted_sexp with
-| Pair(Symbol("unquote"), sexp) -> sexp
-| Pair(Symbol("unquote-splicing"), Pair(sexp, Nil)) -> raise X_syntax_error
-| Pair(Symbol("unquote-slicing"), Pair(car, cdr)) -> Pair(Symbol("append"), Pair(car, (quasiquote_expantion cdr)))
-| Pair(car, cdr) -> Pair(Symbol("cons"), Pair((quasiquote_expantion car), (quasiquote_expantion cdr)))
-| Nil -> Pair(Symbol("quote"), Nil)
+| Pair(Symbol("unquote"), Pair(sexp, Nil)) -> sexp
+| Pair(Pair(Symbol("unquote-splicing"), Pair(car, Nil)), cdr) -> Pair(Symbol("append"), Pair(car, Pair((quasiquote_expantion cdr), Nil)))
+| Pair(Symbol("unquote-splicing"), Pair(sexp, Nil)) -> raise (X_syntax_error)
+| Pair(car, cdr) -> Pair(Symbol("cons"), Pair((quasiquote_expantion car), Pair((quasiquote_expantion cdr), Nil)))
+| Nil -> Pair(Symbol("quote"), Pair(Nil, Nil))
 | Symbol(name) -> Pair(Symbol("quote"), Pair(Symbol(name), Nil))
 | _ -> quasiqouted_sexp;;
 
 
 let rec cond_expantion cond_ribs_sexp = 
 match cond_ribs_sexp with
-|Pair(Pair(test1, then1), rest_ribs) ->  Pair (Symbol "if",Pair (test1, Pair (then1, Pair ((cond_expantion rest_ribs), Nil))))
+|Pair(Pair(test1, then1), rest_ribs) ->  Pair (Symbol "if", Pair (test1, Pair (then1, Pair ((cond_expantion rest_ribs), Nil))))
 |Nil -> Nil
 |_ -> cond_ribs_sexp;;
 
@@ -113,11 +116,12 @@ let rec tag_parse_expression sexpr =
   (* Macro expantions *)
   let sexpr = 
 
-  (* Quasiquote-expantion *)
   match sexpr with
-  | Pair(Symbol("quasiquote"), quasiquoted_sexp) -> (quasiquote_expantion quasiquoted_sexp)
-  | Pair (Symbol "cond", cond_ribs_sexp)-> (cond_expantion cond_ribs_sexp)
-(* and-expantion 
+    (* Quasiquote-expantion *)
+  | Pair(Symbol("quasiquote"), Pair(quasiquoted_sexp, Nil)) -> (quasiquote_expantion quasiquoted_sexp)
+    (* Cond-expantion *)
+  (*| Pair (Symbol "cond", cond_ribs_sexp)-> (cond_expantion cond_ribs_sexp)
+    (* And-expantion *)
   | Pair (Symbol "and", Nil)*)
   | _ -> sexpr
 
@@ -140,9 +144,12 @@ let rec tag_parse_expression sexpr =
           | Pair(something, Nil) -> Const(Sexpr(something))
           | _ -> Const(Sexpr(cdr)))
       | _ -> Const(Sexpr(tag_value)))
-  
+
+
   (* Variable parser *)
-  | Symbol(name) -> if (List.mem name reserved_word_list) then raise X_syntax_error else Var(name)
+  | Symbol(name) -> 
+
+  if (List.mem name reserved_word_list) then raise (X_this_shouldnt_happen_error name) else Var(name)
 
   (* If-expression parser *)
   | Pair(Symbol("if"), Pair(test_sexp, Pair(dit_sexp, maybe_dif_sexp))) -> 
@@ -195,7 +202,7 @@ let rec tag_parse_expression sexpr =
     | Pair(first, rest) -> (match rest with
                           | Nil -> (tag_parse_expression first)
                           | Pair(_, _) -> (Seq(tag_parse_expressions (flatten sexprs)))
-                          | _ -> raise X_this_shouldnt_happen_error)
+                          | _ -> raise (X_this_shouldnt_happen_error "from begin"))
     | Nil -> Const(Void)
     | _ -> raise X_syntax_error) (* thought that through - (begin . 1) is not legal thus the sexprs cannot be not a pair nor a Nil *)
 
@@ -205,7 +212,7 @@ let rec tag_parse_expression sexpr =
       (match first with 
       | Symbol(op) -> 
         if (List.mem op reserved_word_list) 
-        then raise X_this_shouldnt_happen_error (* we were supposed to parse all the reserved words containing expressions *)
+        then raise (X_this_shouldnt_happen_error "from applic")(* we were supposed to parse all the reserved words containing expressions *)
         else (tag_parse_expression first)
       | _ -> (tag_parse_expression first)) in
       let args = (tag_parse_expressions (flatten rest)) in
