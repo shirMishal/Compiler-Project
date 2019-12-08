@@ -62,8 +62,8 @@ let reserved_word_list =
 (* Help functions *)
 
 exception X_this_shouldnt_happen_error;;
-exception X_syntax_error_cond;;
-
+exception X_error of string;;
+(*raise X_error ("cond")*)
 let rec get_names_from_symbol_list symbol_list =
 match symbol_list with
 | Pair(Symbol(first_name), rest) -> first_name :: (get_names_from_symbol_list rest)
@@ -101,12 +101,26 @@ match quasiqouted_sexp with
 | Symbol(name) -> Pair(Symbol("quote"), Pair(Symbol(name), Nil))
 | _ -> quasiqouted_sexp;;
 
+(*Pair (Symbol "if",Pair (test1, Pair (then1, Pair ((cond_expantion rest_ribs), Nil))))   
 
+ Pair (Pair (Number (Int 1), Pair (Number (Int 2), Nil)), Nil)
+ *)
+(*Pair(Pair (test1,
+    Pair (Symbol "=>",
+     Pair (Symbol "lambda",
+      Pair (Pair (Symbol "x", Nil), Pair (Symbol "x", Nil))))),
+  Nil)*)
 let rec cond_expantion cond_ribs_sexp = 
-match cond_ribs_sexp with
-|Pair(Pair(test1, then1), rest_ribs) ->  Pair (Symbol "if",Pair (test1, Pair (then1, Pair ((cond_expantion rest_ribs), Nil))))
+match cond_ribs_sexp with 
+(*Pair (Pair (test1, Pair (Symbol "=>", Pair (Symbol "lambda", Pair (args,body)))), rest_ribs) ->  Pair(Symbol "if", Pair(test1,Pair(    Pair (Pair (Symbol "lambda", Pair (args, body)),test1)   , (cond_expantion rest_ribs)))) *)                           
+|Pair (Pair (test1, Pair (Symbol "=>", Pair (Symbol "lambda", Pair (args,body)))), rest_ribs) ->  Pair(Symbol "if", Pair(test1,Pair(    Pair (Symbol "let",Pair (Pair (Pair (Symbol "value", test1), Nil),body))   , (cond_expantion rest_ribs))))  
+|Pair (Pair (Symbol "else", then_do ),rest_ribs) -> Pair(Symbol "if", Pair( Bool true,  Pair(Symbol"begin" , then_do)  ) )                                                                                                
+                                                   (* Pair(Symbol "if", Pair( Bool true,  Pair(Symbol"begin" , Pair (then_do, Nil))  ) ) *)
+|Pair (Pair (test1, Pair (then1, rest_then)), rest_ribs) ->  Pair(Symbol("if"), Pair(test1, Pair(Pair(Symbol("begin"),Pair (then1, rest_then)), (cond_expantion rest_ribs))))
+ (*|Pair (Pair (test1, Pair (then1, rest_then)), rest_ribs) ->  Pair(Symbol("if"), Pair(test1, Pair(then1, (cond_expantion rest_ribs))))*)                                            
 |Nil -> Nil
 |_ -> cond_ribs_sexp;;
+
 
 
 let rec tag_parse_expression sexpr = 
@@ -116,7 +130,9 @@ let rec tag_parse_expression sexpr =
   (* Quasiquote-expantion *)
   match sexpr with
   | Pair(Symbol("quasiquote"), quasiquoted_sexp) -> (quasiquote_expantion quasiquoted_sexp)
-  | Pair (Symbol "cond", cond_ribs_sexp)-> (cond_expantion cond_ribs_sexp)
+  | Pair (Symbol "cond", cond_ribs_sexp)-> (match cond_ribs_sexp with
+                                            |Nil -> raise X_syntax_error
+                                            |_ ->  (cond_expantion cond_ribs_sexp))
 (* and-expantion 
   | Pair (Symbol "and", Nil)*)
   | _ -> sexpr
@@ -152,7 +168,7 @@ let rec tag_parse_expression sexpr =
       (match maybe_dif_sexp with
         | Pair(dif_sexp, Nil) -> (tag_parse_expression dif_sexp) 
         | Nil -> Const(Void)
-        | _ -> raise X_syntax_error) in
+        | _ -> raise X_syntax_error ) in
     If(test, dit, dif)
 
   (* Lambda-expression parser *)
