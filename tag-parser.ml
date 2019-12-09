@@ -227,6 +227,7 @@ let rec tag_parse_expression sexpr =
       if (is_simple) 
       then LambdaSimple(arg_list, body) 
       else LambdaOpt((List.tl vs_at_front_arg_list), (List.hd vs_at_front_arg_list), body))
+    | Nil -> LambdaSimple([], body)
     | _ -> raise (X_syntax_error "from lambda")))
 
   (* Or-expression parser *)
