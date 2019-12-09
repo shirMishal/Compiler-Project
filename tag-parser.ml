@@ -190,6 +190,11 @@ let quoted_whatever = Pair(Symbol "quote", Pair(Symbol "whatever", Nil));;
 let create_nested_pairs sexp_list =  List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 sexp_list 
                                                                 Nil ;;
+let create_nested_pairs_improper sexp_list x = List.fold_right (fun exp acc -> Pair(exp,acc))
+                                                                sexp_list 
+                                                                x ;;
+
+
 let  letRec_expantion param_list body = 
 match param_list with
 | Nil -> Pair (Symbol "let", Pair(param_list , body))
@@ -197,7 +202,7 @@ match param_list with
   let binding_lst = flatten param_list in
   let new_param_list = List.map (fun rib_sexp -> (match rib_sexp with  
                                                       |Pair(name , Pair (value, Nil)) -> Pair(name , Pair (quoted_whatever, Nil))
-                                                      |_-> raise (X_syntax_error "letrec_expantion param_list"))
+                                                      |_-> raise X_this_should_not_happen)
                             ) binding_lst in
   let new_param_pairs = (create_nested_pairs new_param_list)in 
   let set_list = List.map (fun single_rib -> Pair(Symbol "set!", single_rib)) binding_lst in
@@ -205,8 +210,7 @@ match param_list with
   let nested_pairs_set_body = (create_nested_pairs (List.append set_list [new_body])) in
   Pair(Symbol "let", Pair(new_param_pairs, nested_pairs_set_body))
 )
-| _ -> raise (X_syntax_error "from letRec")
-;;
+| _ -> raise X_this_should_not_happen;;
 (*
 > (print-template '(let (ribs_list) (set!1) (set!2) body))
 Pair(Symbol "let", Pair(Pair(Symbol "ribs_list", Nil), Pair(Pair(Symbol "set!1", Nil), Pair(Pair(Symbol "set!2", Nil), Pair(Symbol "body", Nil)))))
