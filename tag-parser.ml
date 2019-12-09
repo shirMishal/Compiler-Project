@@ -94,6 +94,7 @@ match sexpr_pairs with
 | anything_else -> [anything_else];; 
 
 
+
 let rec quasiquote_expantion quasiqouted_sexp =
 match quasiqouted_sexp with
 | Pair(Symbol("unquote"), Pair(sexp, Nil)) -> sexp
@@ -180,6 +181,42 @@ match pram_lst with
  parm list - :  Pair(Pair(Pair(Symbol "x", Pair(Number (Int 1), Nil)), Pair(Pair(Symbol "y", Pair(Pair(Symbol "+", Pair(Symbol "x", Pair(Number (Int 1), Nil))), Nil)), Nil)), 
  body-:         Pair(Pair(Symbol "+", Pair(Symbol "x", Pair(Symbol "y", Nil))), Nil)  )
 *)
+
+(*let new_vals_list = List.map (fun rib_sexp -> (match rib_sexp with  
+                                                      |Pair(name , Pair (value, Nil)) -> value 
+                                                      |_-> raise (X_syntax_error "letrec_expantion val_list"))
+                            ) binding_lst in*)
+let quoted_whatever = Pair(Symbol "quote", Pair(Symbol "whatever", Nil));;
+let create_nested_pairs sexp_list =  List.fold_right (fun exp acc -> Pair(exp,acc))
+                                                                sexp_list 
+                                                                Nil ;;
+let  letRec_expantion param_list body = 
+match param_list with
+| Nil -> Pair (Symbol "let", Pair(param_list , body))
+| Pair (rib1, rest_ribs) -> (
+  let binding_lst = flatten param_list in
+  let new_param_list = List.map (fun rib_sexp -> (match rib_sexp with  
+                                                      |Pair(name , Pair (value, Nil)) -> Pair(name , Pair (quoted_whatever, Nil))
+                                                      |_-> raise (X_syntax_error "letrec_expantion param_list"))
+                            ) binding_lst in
+  let new_param_pairs = (create_nested_pairs new_param_list)in 
+  let set_list = List.map (fun single_rib -> Pair(Symbol "set!", single_rib)) binding_lst in
+  let new_body = Pair(Symbol "let", Pair(Nil, body)) in
+  let nested_pairs_set_body = (create_nested_pairs (List.append set_list [new_body])) in
+  Pair(Symbol "let", Pair(new_param_pairs, nested_pairs_set_body))
+)
+| _ -> raise (X_syntax_error "from letRec")
+;;
+(*
+> (print-template '(let (ribs_list) (set!1) (set!2) body))
+Pair(Symbol "let", Pair(Pair(Symbol "ribs_list", Nil), Pair(Pair(Symbol "set!1", Nil), Pair(Pair(Symbol "set!2", Nil), Pair(Symbol "body", Nil)))))
+*)
+
+(*
+Pair(Symbol "letrec", Pair(
+  bindings: -  Pair(Pair(Symbol "fact", Pair(Pair(Symbol "lambda", Pair(Pair(Symbol "n", Nil), Pair(Pair(Symbol "if", Pair(Pair(Symbol "=", Pair(Symbol "n", Pair(Number (Int 0), Nil))), Pair(Number (Int 1), Pair(Pair(Symbol "*", Pair(Symbol "n", Pair(Pair(Symbol "fact", Pair(Pair(Symbol "-", Pair(Symbol "n", Pair(Number (Int 1), Nil))), Nil)), Nil))), Nil)))), Nil))), Nil)), Nil)   ,  
+  body                 Pair(Pair(Symbol "fact", Pair(Number (Int 3), Nil)), Nil)                     ))
+*)
 let rec tag_parse_expression sexpr = 
   (* Macro expantions *)
   (*let sexpr = *)
@@ -193,7 +230,7 @@ let rec tag_parse_expression sexpr =
   | Pair (Symbol "and", args) -> (tag_parse_expression (and_expantion args))
   | Pair (Symbol "let", Pair(pram_lst , body)) -> (tag_parse_expression (let_expantion pram_lst body ))
   | Pair(Symbol "let*", Pair(param_lst, body)) -> (tag_parse_expression (letStar_expantion param_lst body)) 
-  
+  | Pair(Symbol "letrec", Pair(param_lst, body)) -> (tag_parse_expression (letRec_expantion param_lst body))
   (*| _ -> sexpr
 
 
