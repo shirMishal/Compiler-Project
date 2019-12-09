@@ -122,38 +122,37 @@ match args with
 ;;
 
 let handle_empty sexp =
+(*if parm lst is empty vals_sexp equals to Pair(Nil, Nil) -should handle *)
 match sexp with 
 |Pair (Nil, Nil) -> Nil
 |__ -> sexp;;
 
-let rec let_expantion pram_lst  body =
-let binding_lst = flatten pram_lst in
-let params_list = List.map (fun sexp -> (match sexp with |Nil-> Nil 
+let make_param_list binding_lst = List.map (fun sexp -> (match sexp with |Nil-> Nil 
                                                          |Pair(name , value) -> name
                                                          |_-> raise (X_syntax_error "let_expantion params_list"))
-                            ) binding_lst in
-let val_list = List.map (fun sexp -> (match sexp with |Nil-> Nil 
+                            ) binding_lst;;
+let make_val_list binding_lst = List.map (fun sexp -> (match sexp with |Nil-> Nil 
                                                       |Pair(name , Pair (value, Nil)) -> value
                                                       |_-> raise (X_syntax_error "let_expantion val_list"))
-                            ) binding_lst in
-let params_sexp = handle_empty (List.fold_right (fun exp acc -> Pair(exp,acc))
+                            ) binding_lst;;
+let make_sexp_params params_list = handle_empty (List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 params_list 
-                                                                Nil )
-                                                                in
-let vals_sexp = handle_empty  (List.fold_right (fun exp acc -> Pair(exp,acc))
+                                                                Nil );;
+let make_sexp_vals val_list = handle_empty  (List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 val_list 
-                                                                Nil )
-                                                                in
-
-(*if parm lst is empty vals_sexp equals to Pair(Nil, Nil) -should handle *)
+                                                                Nil );;                                                   
+let rec let_expantion pram_lst  body =
+let binding_lst = flatten pram_lst in
+let params_list = (make_param_list binding_lst) in
+let val_list =  (make_val_list binding_lst) in
+let params_sexp = (make_sexp_params params_list)     in
+let vals_sexp = (make_sexp_vals val_list)   in
 Pair(
   Pair(Symbol "lambda", Pair(params_sexp, body)),
   vals_sexp)
 ;;
 (*
 Pair(Pair(Symbol "lambda", Pair(Nil, Pair(Number (Int 3), Nil))), Nil)
-     
-
 Pair(Symbol "let", Pair(
                       Pair(Pair(Symbol "x1", Pair(Number (Int 1), Nil)), Pair(Pair(Symbol "x2", Pair(Number (Int 2), Nil)), Nil)), 
                         Pair(Pair(Symbol "+", Pair(Symbol "x1", Pair(Symbol "x2", Nil))), Nil)))
@@ -161,8 +160,26 @@ Pair(
   Pair(Symbol "lambda", Pair(Pair(Symbol "x1", Pair(Symbol "x2", Nil)), Pair(Pair(Symbol "+", Pair(Symbol "x1", Pair(Symbol "x2", Nil))), Nil))),
    Pair(Number (Int 1), Pair(Number (Int 2), Nil)))
 *)
-let rec letStar_expantion pram_lst  body = Nil;;
+(*
+> (print-template '((a 1)))
+Pair(Pair(Symbol "a", Pair(Number (Int 1), Nil)), Nil)
+> (print-template '((a 1) (b 2)))
+Pair(Pair(Symbol "a", Pair(Number (Int 1), Nil)), Pair(Pair(Symbol "b", Pair(Number (Int 2), Nil)), Nil))
+*)
 
+let rec letStar_expantion pram_lst  body = 
+match pram_lst with
+| Nil -> Pair (Symbol "let", Pair(pram_lst , body))
+| Pair(rib1, Nil) -> Pair (Symbol "let", Pair(pram_lst , body))
+(*ribs contains more then one element *)
+| Pair (rib1, rest_ribs) -> Pair (Symbol "let", Pair( Pair (rib1,Nil) ,Pair ((letStar_expantion rest_ribs body),Nil)))
+|_ -> raise (X_syntax_error "from letStar")
+;;
+(*
+(print-template '(let* ((x 1) (y (+ x 1))) (+ x y) ))
+ parm list - :  Pair(Pair(Pair(Symbol "x", Pair(Number (Int 1), Nil)), Pair(Pair(Symbol "y", Pair(Pair(Symbol "+", Pair(Symbol "x", Pair(Number (Int 1), Nil))), Nil)), Nil)), 
+ body-:         Pair(Pair(Symbol "+", Pair(Symbol "x", Pair(Symbol "y", Nil))), Nil)  )
+*)
 let rec tag_parse_expression sexpr = 
   (* Macro expantions *)
   (*let sexpr = *)
