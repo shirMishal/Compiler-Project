@@ -161,25 +161,26 @@ Pair(
   Pair(Symbol "lambda", Pair(Pair(Symbol "x1", Pair(Symbol "x2", Nil)), Pair(Pair(Symbol "+", Pair(Symbol "x1", Pair(Symbol "x2", Nil))), Nil))),
    Pair(Number (Int 1), Pair(Number (Int 2), Nil)))
 *)
-
+let rec letStar_expantion pram_lst  body = Nil;;
 
 let rec tag_parse_expression sexpr = 
   (* Macro expantions *)
-  let sexpr = 
+  (*let sexpr = *)
 
   match sexpr with
-  | Pair(Symbol("quasiquote"), Pair(quasiquoted_sexp, Nil)) -> (quasiquote_expantion quasiquoted_sexp)
+  | Pair(Symbol("quasiquote"), Pair(quasiquoted_sexp, Nil)) -> (tag_parse_expression (quasiquote_expantion quasiquoted_sexp))
   | Pair (Symbol "cond", cond_ribs_sexp)-> (match cond_ribs_sexp with
                                             |Nil -> raise (X_syntax_error "from cond expantion")
-                                            |_ ->  (cond_expantion cond_ribs_sexp))
+                                            |_ -> (tag_parse_expression (cond_expantion cond_ribs_sexp)))
 (* and-expantion *)
-  | Pair (Symbol "and", args) -> (and_expantion args)
-  | Pair (Symbol "let", Pair(pram_lst , body)) -> (let_expantion pram_lst body ) 
+  | Pair (Symbol "and", args) -> (tag_parse_expression (and_expantion args))
+  | Pair (Symbol "let", Pair(pram_lst , body)) -> (tag_parse_expression (let_expantion pram_lst body ))
+  | Pair(Symbol "let*", Pair(param_lst, body)) -> (tag_parse_expression (letStar_expantion param_lst body)) 
   
-  | _ -> sexpr
+  (*| _ -> sexpr
 
 
-  in match sexpr with
+  in match sexpr with*)
   (* Constant parser *)
   | Bool(_) -> Const(Sexpr(sexpr))
   | Char(_) -> Const(Sexpr(sexpr))
