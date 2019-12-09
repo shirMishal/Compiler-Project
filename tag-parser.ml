@@ -180,24 +180,31 @@ match pram_lst with
  parm list - :  Pair(Pair(Pair(Symbol "x", Pair(Number (Int 1), Nil)), Pair(Pair(Symbol "y", Pair(Pair(Symbol "+", Pair(Symbol "x", Pair(Number (Int 1), Nil))), Nil)), Nil)), 
  body-:         Pair(Pair(Symbol "+", Pair(Symbol "x", Pair(Symbol "y", Nil))), Nil)  )
 *)
+
+
 let rec tag_parse_expression sexpr = 
   (* Macro expantions *)
-  (*let sexpr = *)
 
   match sexpr with
+  (* qq-expantion *)
   | Pair(Symbol("quasiquote"), Pair(quasiquoted_sexp, Nil)) -> (tag_parse_expression (quasiquote_expantion quasiquoted_sexp))
-  | Pair (Symbol "cond", cond_ribs_sexp)-> (match cond_ribs_sexp with
-                                            |Nil -> raise (X_syntax_error "from cond expantion")
-                                            |_ -> (tag_parse_expression (cond_expantion cond_ribs_sexp)))
-(* and-expantion *)
-  | Pair (Symbol "and", args) -> (tag_parse_expression (and_expantion args))
-  | Pair (Symbol "let", Pair(pram_lst , body)) -> (tag_parse_expression (let_expantion pram_lst body ))
-  | Pair(Symbol "let*", Pair(param_lst, body)) -> (tag_parse_expression (letStar_expantion param_lst body)) 
   
-  (*| _ -> sexpr
+  (* cond-expantion *)
+  | Pair (Symbol "cond", cond_ribs_sexp)-> (match cond_ribs_sexp with
+                                            | Nil -> raise (X_syntax_error "from cond expantion")
+                                            | _ -> (tag_parse_expression (cond_expantion cond_ribs_sexp)))
+  (* and-expantion *)
+  | Pair (Symbol "and", args) -> (tag_parse_expression (and_expantion args))
+  
+  (* let-expantion *)
+  | Pair (Symbol "let", Pair(pram_lst , body)) -> (tag_parse_expression (let_expantion pram_lst body ))
+  
+  (* let-star-expantion *)
+  | Pair(Symbol "let*", Pair(param_lst, body)) -> (tag_parse_expression (letStar_expantion param_lst body)) 
 
+  (* define-mit-expantion *)
+  | Pair(Symbol("define"), Pair(Pair(Symbol(var_name), args_list), body)) -> (tag_parse_expression Pair(Symbol("define"), Pair(Symbol(var_name), Pair(Symbol("lambda"), Pair(arg_list, body)))))
 
-  in match sexpr with*)
   (* Constant parser *)
   | Bool(_) -> Const(Sexpr(sexpr))
   | Char(_) -> Const(Sexpr(sexpr))
