@@ -123,7 +123,7 @@ match cond_ribs_sexp with
 
 |Pair(Pair(test1, Pair(then1, rest_then)), rest_ribs)-> Pair(Symbol "if", Pair(test1, Pair(Pair(Symbol "begin", Pair(then1, rest_then)), (match rest_ribs with
                                                                                                                                                 |Nil -> Nil
-                                                                                                                                                |_-> (cond_expantion rest_ribs)))))
+                                                                                                                                                |_-> Pair((cond_expantion rest_ribs), Nil)))))
 
 
 (*Pair (Pair (test1, Pair (then1, rest_then)), rest_ribs) ->  Pair(Symbol("if"), Pair(test1, Pair(Pair(Symbol("begin"),Pair (then1, rest_then)), (cond_expantion rest_ribs))))*)
