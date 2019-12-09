@@ -108,25 +108,25 @@ match quasiqouted_sexp with
 
 let rec cond_expantion cond_ribs_sexp = 
 match cond_ribs_sexp with                        
-|Pair (Pair (test1, Pair (Symbol ("=>"), Pair (Symbol "lambda", Pair (args,body)))), rest_ribs) ->  Pair(Symbol "if", Pair(test1,Pair(    Pair (Symbol "let",Pair (Pair (Pair (Symbol "value", test1), Nil),body))   , (cond_expantion rest_ribs))))  
-|Pair (Pair (Symbol "else", then_do), rest_ribs) -> Pair(Symbol "if", Pair( Bool true,  Pair(Pair(Symbol"begin" , then_do), Nil)))                                                                                                
- |Pair(Pair(test1, Pair(then1, rest_then)), rest_ribs)-> Pair(Symbol "if", Pair(test1, Pair(Pair(Symbol "begin", Pair(then1, rest_then)), (match rest_ribs with
+| Pair (Pair (test1, Pair (Symbol ("=>"), Pair (Symbol "lambda", Pair (args,body)))), rest_ribs) ->  Pair(Symbol "if", Pair(test1,Pair(    Pair (Symbol "let",Pair (Pair (Pair (Symbol "value", test1), Nil),body))   , (cond_expantion rest_ribs))))  
+| Pair (Pair (Symbol "else", then_do), rest_ribs) -> Pair(Symbol "if", Pair( Bool true,  Pair(Pair(Symbol"begin" , then_do), Nil)))                                                                                                
+ | Pair(Pair(test1, Pair(then1, rest_then)), rest_ribs)-> Pair(Symbol "if", Pair(test1, Pair(Pair(Symbol "begin", Pair(then1, rest_then)), (match rest_ribs with
                                                                                                                                                 |Nil -> Nil
-                                                                                                                                                |_-> (cond_expantion rest_ribs)))))        
+                                                                                                                           |_-> Pair((cond_expantion rest_ribs), Nil)))))        
 |_ -> cond_ribs_sexp;;
 
 let rec and_expantion args =
 match args with
-|Nil-> Bool (true)
+| Nil -> Bool (true)
 | Pair(first_arg, rest_args) -> Pair(Symbol "if", Pair(first_arg, Pair((and_expantion rest_args), Pair(first_arg, Nil))))
-|_-> raise(X_syntax_error "and_expantion") 
+| _ -> raise(X_syntax_error "and_expantion") 
 ;;
 
 let handle_empty sexp =
 (*if parm lst is empty vals_sexp equals to Pair(Nil, Nil) -should handle *)
 match sexp with 
 |Pair (Nil, Nil) -> Nil
-|__ -> sexp;;
+|_ -> sexp;;
 
 let make_param_list binding_lst = List.map (fun sexp -> (match sexp with |Nil-> Nil 
                                                          |Pair(name , value) -> name
@@ -223,22 +223,29 @@ Pair(Symbol "letrec", Pair(
 *)
 let rec tag_parse_expression sexpr = 
   (* Macro expantions *)
-  (*let sexpr = *)
 
   match sexpr with
+  (* qq-expantion *)
   | Pair(Symbol("quasiquote"), Pair(quasiquoted_sexp, Nil)) -> (tag_parse_expression (quasiquote_expantion quasiquoted_sexp))
+  
+  (* cond-expantion *)
   | Pair (Symbol "cond", cond_ribs_sexp)-> (match cond_ribs_sexp with
-                                            |Nil -> raise (X_syntax_error "from cond expantion")
-                                            |_ -> (tag_parse_expression (cond_expantion cond_ribs_sexp)))
-(* and-expantion *)
+                                            | Nil -> raise (X_syntax_error "from cond expantion")
+                                            | _ -> (tag_parse_expression (cond_expantion cond_ribs_sexp)))
+  (* and-expantion *)
   | Pair (Symbol "and", args) -> (tag_parse_expression (and_expantion args))
+  
+  (* let-expantion *)
   | Pair (Symbol "let", Pair(pram_lst , body)) -> (tag_parse_expression (let_expantion pram_lst body ))
+  (* let-star-expantion *)
   | Pair(Symbol "let*", Pair(param_lst, body)) -> (tag_parse_expression (letStar_expantion param_lst body)) 
   | Pair(Symbol "letrec", Pair(param_lst, body)) -> (tag_parse_expression (letRec_expantion param_lst body))
-  (*| _ -> sexpr
+
+  (* define-mit-expantion *)
+  | Pair(Symbol("define"), Pair(Pair(Symbol(var_name), args_list), body)) -> 
+    (tag_parse_expression (Pair(Symbol "define", Pair(Symbol(var_name), Pair(Pair(Symbol("lambda"), Pair(args_list, body)), Nil)))))
 
 
-  in match sexpr with*)
   (* Constant parser *)
   | Bool(_) -> Const(Sexpr(sexpr))
   | Char(_) -> Const(Sexpr(sexpr))
@@ -286,6 +293,7 @@ let rec tag_parse_expression sexpr =
       if (is_simple) 
       then LambdaSimple(arg_list, body) 
       else LambdaOpt((List.tl vs_at_front_arg_list), (List.hd vs_at_front_arg_list), body))
+    | Nil -> LambdaSimple([], body)
     | _ -> raise (X_syntax_error "from lambda")))
 
   (* Or-expression parser *)
