@@ -50,6 +50,15 @@ module type TAG_PARSER = sig
 
   (* to delete *)
   val cond_expantion : sexpr -> sexpr
+  val flatten : sexpr -> sexpr list
+  val handle_empty : sexpr -> sexpr
+  val make_param_list : sexpr list -> sexpr list
+  val make_val_list : sexpr list -> sexpr list
+  
+  val make_sexp_vals : sexpr list -> sexpr 
+  val make_sexp_params : sexpr list -> sexpr
+  val let_expantion : sexpr -> sexpr -> sexpr
+  (*to here*)
 end;; (* signature TAG_PARSER *)
 
 module Tag_Parser : TAG_PARSER = struct
@@ -235,7 +244,8 @@ let rec tag_parse_expression sexpr =
   (* and-expantion *)
   | Pair (Symbol "and", args) -> (tag_parse_expression (and_expantion args))
   
-  (* let-expantion *)
+  (* let-expantion Pair(Symbol "let", Pair(Nil, Pair(Number (Int 3), Nil)))
+                     result: Pair (Pair (Symbol "lambda", Pair (Nil, Pair (Number (Int 3), Nil))), Nil)  *)
   | Pair (Symbol "let", Pair(pram_lst , body)) -> (tag_parse_expression (let_expantion pram_lst body ))
   (* let-star-expantion *)
   | Pair(Symbol "let*", Pair(param_lst, body)) -> (tag_parse_expression (letStar_expantion param_lst body)) 
@@ -331,6 +341,8 @@ let rec tag_parse_expression sexpr =
     | _ -> raise (X_syntax_error "from begin")) (* thought that through - (begin . 1) is not legal thus the sexprs cannot be not a pair nor a Nil *)
 
   (* Application-expression parser *)
+  (*Pair (Pair (Symbol "lambda", Pair (Nil, Pair (Number (Int 3), Nil))), Nil)
+       Pair(Symbol "+", Pair(Number (Int 1), Pair(Number (Int 2), Nil)))   *)
   | Pair (first, rest) -> 
     let op = 
       (match first with 
@@ -339,7 +351,9 @@ let rec tag_parse_expression sexpr =
         then raise (X_this_shouldnt_happen_error "from applic")(* we were supposed to parse all the reserved words containing expressions *)
         else (tag_parse_expression first)
       | _ -> (tag_parse_expression first)) in
-      let args = (tag_parse_expressions (flatten rest)) in
+      let args =(match rest with
+                  | Nil -> [Const Void]
+                  | _->  (tag_parse_expressions (flatten rest))) in
       Applic(op, args)
   
   (* All parser failed  *)
