@@ -245,8 +245,8 @@ match param_list with
                             ) binding_lst in
   let new_param_pairs = (create_nested_pairs new_param_list)in 
   let set_list = List.map (fun single_rib -> Pair(Symbol "set!", single_rib)) binding_lst in
-  let new_body = Pair(Symbol "let", Pair(Nil, body)) in
-  let nested_pairs_set_body = (create_nested_pairs (List.append set_list [new_body])) in
+  (*let new_body = Pair(Symbol "let", Pair(Nil, body)) in*)
+  let nested_pairs_set_body = (create_nested_pairs (List.append set_list [body])) in
   Pair(Symbol "let", Pair(new_param_pairs, nested_pairs_set_body))
 )
 | _ -> raise X_this_should_not_happen;;
@@ -326,6 +326,9 @@ let rec tag_parse_expression sexpr =
 
   (* Lambda-expression parser *)
   | Pair(Symbol("lambda"), Pair(arg_list, exprs)) -> 
+    (match exprs with
+    | Nil -> raise (X_syntax_error "empty body in lambda")
+    | _ ->
     (let body = tag_parse_expression (Pair(Symbol("begin"), exprs)) in
     (match arg_list with
     | Symbol(variadic_symbol) -> LambdaOpt([], variadic_symbol, body)
@@ -337,7 +340,7 @@ let rec tag_parse_expression sexpr =
       then LambdaSimple(arg_list, body) 
       else LambdaOpt((List.tl vs_at_front_arg_list), (List.hd vs_at_front_arg_list), body))
     | Nil -> LambdaSimple([], body)
-    | _ -> raise (X_syntax_error "from lambda2")))
+    | _ -> raise (X_syntax_error "from lambda2"))))
 
   (* Or-expression parser *)
   | Pair (Symbol("or"), args) -> ( match args with 
