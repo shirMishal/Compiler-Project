@@ -147,10 +147,20 @@ match cond_ribs_sexp with
 let rec and_expantion args =
 match args with
 | Nil -> Bool (true)
-| Pair(first_arg, rest_args) -> Pair(Symbol "if", Pair(first_arg, Pair((and_expantion rest_args), Pair(first_arg, Nil))))
+| Pair(one_arg , Nil) -> one_arg
+| Pair(first_arg, rest_args) -> Pair(Symbol "if", Pair(first_arg, Pair((and_expantion rest_args), Pair(Bool false, Nil))))
 | _ -> raise(X_syntax_error "and_expantion") 
 ;;
+(*
+Pair(Symbol "a", Pair(Symbol "s", Pair(Symbol "b", Pair(Symbol "d", Pair(Symbol "s", Nil)))))
 
+test_ "(and a s b d s)" (If (Var "a",
+              If (Var "s",
+                If (Var "b", If (Var "d", Var "s", Const (Sexpr (Bool false))),
+                Const (Sexpr (Bool false))),
+                Const (Sexpr (Bool false))),
+              Const (Sexpr (Bool false))));;
+*)
 let handle_empty sexp =
 (*if parm lst is empty vals_sexp equals to Pair(Nil, Nil) -should handle *)
 match sexp with 
@@ -263,7 +273,7 @@ let rec tag_parse_expression sexpr =
                                             | _ -> (tag_parse_expression (cond_expantion cond_ribs_sexp)))
   (* and-expantion *)
   | Pair (Symbol "and", args) -> (tag_parse_expression (and_expantion args))
-  
+ 
   (* let-expantion Pair(Symbol "let", Pair(Nil, Pair(Number (Int 3), Nil)))
                      result: Pair (Pair (Symbol "lambda", Pair (Nil, Pair (Number (Int 3), Nil))), Nil)  *)
   | Pair (Symbol "let", Pair(pram_lst , body)) -> (tag_parse_expression (let_expantion pram_lst body ))
@@ -342,7 +352,7 @@ let rec tag_parse_expression sexpr =
     (match var_val_sexp with
       | Pair(var_sexp, Pair(val_sexp, Nil))-> Set (tag_parse_expression (var_sexp),
                                                           tag_parse_expression (val_sexp))
-      | _ -> raise (X_syntax_error "from set!"))
+      | _ -> raise (X_syntax_error "")(*raise X_syntax_error "from set!" *) )
 
   (* Define-expression parser *)
   | Pair (Symbol("define"), var_val_sexp) -> 
