@@ -109,6 +109,7 @@ let rec quasiquote_expantion quasiqouted_sexp =
 match quasiqouted_sexp with
 | Pair(Symbol("unquote"), Pair(sexp, Nil)) -> sexp
 | Pair(Pair(Symbol("unquote-splicing"), Pair(car, Nil)), cdr) -> Pair(Symbol("append"), Pair(car, Pair((quasiquote_expantion cdr), Nil)))
+| Pair(car, Pair(Symbol "unquote-splicing", Pair(spliced_sexp, Nil))) -> Pair(Symbol("cons"), Pair((quasiquote_expantion car), Pair(spliced_sexp, Nil)))
 | Pair(Symbol("unquote-splicing"), sexp) -> raise (X_syntax_error "from qq-splicing")
 | Pair(car, cdr) -> Pair(Symbol("cons"), Pair((quasiquote_expantion car), Pair((quasiquote_expantion cdr), Nil)))
 | Nil -> Pair(Symbol("quote"), Pair(Nil, Nil))
@@ -118,25 +119,40 @@ match quasiqouted_sexp with
 
 let rec cond_expantion cond_ribs_sexp = 
 match cond_ribs_sexp with                        
-| Pair(Pair (test, Pair(Symbol("=>"), Pair(proc, Nil))), rest_ribs) -> Pair (Symbol "let",                                                                                                                                       
+| Pair(Pair (test, Pair(Symbol("=>"), Pair(proc, Nil))), rest_ribs) -> 
+  (match rest_ribs with
+  | Nil -> Pair (Symbol "let",                                                                                                                                       
  Pair                                                                                                                                                     
   (Pair (Pair (Symbol "value", Pair (test, Nil)),
     Pair
      (Pair (Symbol "f",
        Pair (Pair (Symbol "lambda", Pair (Nil, Pair (proc, Nil))),
         Nil)),
-     Pair
-      (Pair (Symbol "rest",
-        Pair
-         (Pair (Symbol "lambda", Pair (Nil, match rest_ribs with | Nil -> Nil | _ -> Pair ((cond_expantion rest_ribs), Nil))),
-         Nil)),
-      Nil))),
+      Nil)),
   Pair
    (Pair (Symbol "if",
      Pair (Symbol "value",
-      Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)),
-       Pair (Pair (Symbol "rest", Nil), Nil)))),
+      Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)), Nil))),
    Nil)))
+  | _ -> Pair (Symbol "let",                                                                                                                                       
+      Pair                                                                                                                                                     
+        (Pair (Pair (Symbol "value", Pair (test, Nil)),
+          Pair
+          (Pair (Symbol "f",
+            Pair (Pair (Symbol "lambda", Pair (Nil, Pair (proc, Nil))),
+              Nil)),
+          Pair
+            (Pair (Symbol "rest",
+              Pair
+              (Pair (Symbol "lambda", Pair (Nil, Pair ((cond_expantion rest_ribs), Nil))),
+              Nil)),
+            Nil))),
+        Pair
+        (Pair (Symbol "if",
+          Pair (Symbol "value",
+            Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)),
+            Pair (Pair (Symbol "rest", Nil), Nil)))),
+        Nil))))
 | Pair (Pair (Symbol "else", then_do), rest_ribs) -> Pair(Symbol "begin", then_do)
 (*Pair(Symbol "if", Pair( Bool true,  Pair(Pair(Symbol"begin" , then_do), Nil)))*)                                                                                                
 | Pair(Pair(test1, then_sexp), rest_ribs)-> Pair(Symbol "if", Pair(test1, Pair(Pair(Symbol "begin", then_sexp), (match rest_ribs with
@@ -397,7 +413,7 @@ let rec tag_parse_expression sexpr =
       Applic(op, args)
   
   (* All parser failed  *)
-  | _ -> raise (X_syntax_error "all parsing failed")
+  | _ -> raise (X_lambda_error sexpr)
 
 
 and tag_parse_expressions sexprs = 
