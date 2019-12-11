@@ -245,7 +245,10 @@ match param_list with
                             ) binding_lst in
   let new_param_pairs = (create_nested_pairs new_param_list)in 
   let set_list = List.map (fun single_rib -> Pair(Symbol "set!", single_rib)) binding_lst in
-  let new_body = Pair(Symbol "let", Pair(Nil, body)) in
+  let new_body = (match body with |Pair(Pair(op, args), Nil) -> Pair(op, args)
+                                  |Nil -> raise( X_syntax_error "") 
+                                  |_ -> body ) in
+  (*let new_body = Pair(Symbol "let", Pair(Nil, body)) in*)
   let nested_pairs_set_body = (create_nested_pairs (List.append set_list [new_body])) in
   Pair(Symbol "let", Pair(new_param_pairs, nested_pairs_set_body))
 )
