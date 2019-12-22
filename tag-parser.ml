@@ -42,24 +42,12 @@ let rec expr_eq e1 e2 =
   | _ -> false;;
 	
                        
-exception X_syntax_error of string;;
-exception X_lambda_error of sexpr;;
+exception X_syntax_error;;
 
 module type TAG_PARSER = sig
   val tag_parse_expression : sexpr -> expr
   val tag_parse_expressions : sexpr list -> expr list
 
-  (* to delete *)
-  val cond_expantion : sexpr -> sexpr
-  val flatten : sexpr -> sexpr list
-  val handle_empty : sexpr -> sexpr
-  val make_param_list : sexpr list -> sexpr list
-  val make_val_list : sexpr list -> sexpr list
-  
-  val make_sexp_vals : sexpr list -> sexpr 
-  val make_sexp_params : sexpr list -> sexpr
-  val let_expantion : sexpr -> sexpr -> sexpr
-  (*to here*)
 end;; (* signature TAG_PARSER *)
 
 module Tag_Parser : TAG_PARSER = struct
@@ -82,14 +70,14 @@ match symbol_list with
 | Pair(Symbol(first_name), rest) -> first_name :: (get_names_from_symbol_list rest)
 | Symbol(name) -> [name]
 | Nil -> []
-| _ -> raise (X_syntax_error "get_names_from_symbol_list");;
+| _ -> raise X_syntax_error;;
 
 let rec is_simple_arg_list list =
   match list with
   | Pair(_, Nil) -> true
   | Symbol(_) -> false
   | Pair(_, rest) -> is_simple_arg_list rest
-  | _ -> raise (X_syntax_error "is_simple_arg_list");;
+  | _ -> raise X_syntax_error;;
 
 let last_to_front list =
 let rvrs = (List.rev list) in
@@ -110,7 +98,7 @@ match quasiqouted_sexp with
 | Pair(Symbol("unquote"), Pair(sexp, Nil)) -> sexp
 | Pair(Pair(Symbol("unquote-splicing"), Pair(car, Nil)), cdr) -> Pair(Symbol("append"), Pair(car, Pair((quasiquote_expantion cdr), Nil)))
 | Pair(car, Pair(Symbol "unquote-splicing", Pair(spliced_sexp, Nil))) -> Pair(Symbol("cons"), Pair((quasiquote_expantion car), Pair(spliced_sexp, Nil)))
-| Pair(Symbol("unquote-splicing"), sexp) -> raise (X_syntax_error "from qq-splicing")
+| Pair(Symbol("unquote-splicing"), sexp) -> raise X_syntax_error
 | Pair(car, cdr) -> Pair(Symbol("cons"), Pair((quasiquote_expantion car), Pair((quasiquote_expantion cdr), Nil)))
 | Nil -> Pair(Symbol("quote"), Pair(Nil, Nil))
 | Symbol(name) -> Pair(Symbol("quote"), Pair(Symbol(name), Nil))
@@ -165,7 +153,7 @@ match args with
 | Nil -> Bool (true)
 | Pair(one_arg , Nil) -> one_arg
 | Pair(first_arg, rest_args) -> Pair(Symbol "if", Pair(first_arg, Pair((and_expantion rest_args), Pair(Bool false, Nil))))
-| _ -> raise(X_syntax_error "and_expantion") 
+| _ -> raise X_syntax_error 
 ;;
 (*
 Pair(Symbol "a", Pair(Symbol "s", Pair(Symbol "b", Pair(Symbol "d", Pair(Symbol "s", Nil)))))
@@ -185,11 +173,11 @@ match sexp with
 
 let make_param_list binding_lst = List.map (fun sexp -> (match sexp with |Nil-> Nil 
                                                          |Pair(name , value) -> name
-                                                         |_-> raise (X_syntax_error "let_expantion params_list"))
+                                                         |_-> raise X_syntax_error)
                             ) binding_lst;;
 let make_val_list binding_lst = List.map (fun sexp -> (match sexp with |Nil-> Nil 
                                                       |Pair(name , Pair (value, Nil)) -> value
-                                                      |_-> raise (X_syntax_error "let_expantion val_list"))
+                                                      |_-> raise X_syntax_error)
                             ) binding_lst;;
 let make_sexp_params params_list = handle_empty (List.fold_right (fun exp acc -> Pair(exp,acc))
                                                                 params_list 
@@ -229,7 +217,7 @@ match pram_lst with
 | Pair(rib1, Nil) -> Pair (Symbol "let", Pair(pram_lst , body))
 (*ribs contains more then one element *)
 | Pair (rib1, rest_ribs) -> Pair (Symbol "let", Pair( Pair (rib1,Nil) ,Pair ((letStar_expantion rest_ribs body),Nil)))
-|_ -> raise (X_syntax_error "from letStar")
+|_ -> raise X_syntax_error
 ;;
 (*
 (print-template '(let* ((x 1) (y (+ x 1))) (+ x y) ))
@@ -239,7 +227,7 @@ match pram_lst with
 
 (*let new_vals_list = List.map (fun rib_sexp -> (match rib_sexp with  
                                                       |Pair(name , Pair (value, Nil)) -> value 
-                                                      |_-> raise (X_syntax_error "letrec_expantion val_list"))
+                                                      |_-> raise X_syntax_error)
                             ) binding_lst in*)
 let quoted_whatever = Pair(Symbol "quote", Pair(Symbol "whatever", Nil));;
 let create_nested_pairs sexp_list =  List.fold_right (fun exp acc -> Pair(exp,acc))
@@ -261,9 +249,9 @@ match param_list with
                             ) binding_lst in
   let new_param_pairs = (create_nested_pairs new_param_list)in 
   let set_list = List.map (fun single_rib -> Pair(Symbol "set!", single_rib)) binding_lst in
-  let new_body = (match body with |Pair(Pair(op, args), Nil) -> Pair(op, args)
-                                  |Nil -> raise( X_syntax_error "") 
-                                  |_ -> body ) in
+  let new_body = (match body with | Pair(Pair(op, args), Nil) -> Pair(op, args)
+                                  | Nil -> raise X_syntax_error 
+                                  | _ -> body ) in
   (*let new_body = Pair(Symbol "let", Pair(Nil, body)) in*)
   let nested_pairs_set_body = (create_nested_pairs (List.append set_list [new_body])) in
   Pair(Symbol "let", Pair(new_param_pairs, nested_pairs_set_body))
@@ -288,7 +276,7 @@ let rec tag_parse_expression sexpr =
   
   (* cond-expantion *)
   | Pair (Symbol "cond", cond_ribs_sexp)-> (match cond_ribs_sexp with
-                                            | Nil -> raise (X_syntax_error "from cond expantion")
+                                            | Nil -> raise X_syntax_error
                                             | _ -> (tag_parse_expression (cond_expantion cond_ribs_sexp)))
   (* and-expantion *)
   | Pair (Symbol "and", args) -> (tag_parse_expression (and_expantion args))
@@ -339,14 +327,14 @@ let rec tag_parse_expression sexpr =
         (match maybe_dif_sexp with
           | Pair(dif_sexp, Nil) -> (tag_parse_expression dif_sexp) 
           | Nil -> Const(Void)
-          | _ -> raise (X_syntax_error "from if")) in
+          | _ -> raise X_syntax_error) in
       If(test, dit, dif)
-    | _ -> raise (X_syntax_error "from if"))
+    | _ -> raise X_syntax_error)
 
   (* Lambda-expression parser *)
   | Pair(Symbol("lambda"), Pair(arg_list, exprs)) -> 
     (match exprs with
-    | Nil -> raise (X_syntax_error "empty body in lambda")
+    | Nil -> raise X_syntax_error
     | _ ->
     (let body = tag_parse_expression (Pair(Symbol("begin"), exprs)) in
     (match arg_list with
@@ -359,7 +347,7 @@ let rec tag_parse_expression sexpr =
       then LambdaSimple(arg_list, body) 
       else LambdaOpt((List.tl vs_at_front_arg_list), (List.hd vs_at_front_arg_list), body))
     | Nil -> LambdaSimple([], body)
-    | _ -> raise (X_syntax_error "from lambda2"))))
+    | _ -> raise X_syntax_error)))
 
   (* Or-expression parser *)
   | Pair (Symbol("or"), args) -> ( match args with 
@@ -374,7 +362,7 @@ let rec tag_parse_expression sexpr =
     (match var_val_sexp with
       | Pair(var_sexp, Pair(val_sexp, Nil))-> Set (tag_parse_expression (var_sexp),
                                                           tag_parse_expression (val_sexp))
-      | _ -> raise (X_syntax_error "")(*raise X_syntax_error "from set!" *) )
+      | _ -> raise X_syntax_error(*raise X_syntax_error "from set!" *) )
 
   (* Define-expression parser *)
   | Pair (Symbol("define"), var_val_sexp) -> 
@@ -382,9 +370,9 @@ let rec tag_parse_expression sexpr =
       | Pair(var_sexp, value_sexp)-> 
         (let var_exp =  (tag_parse_expression (var_sexp)) in
         (match var_exp with 
-        | Var(x) -> Def (var_exp, match value_sexp with | Pair(val_sexp, Nil) -> tag_parse_expression (val_sexp) | Nil -> Const(Void) | _ -> raise (X_syntax_error "from define"))
-        | _ -> raise (X_syntax_error "from define")))
-      | _ -> raise (X_syntax_error "from define"))
+        | Var(x) -> Def (var_exp, match value_sexp with | Pair(val_sexp, Nil) -> tag_parse_expression (val_sexp) | Nil -> Const(Void) | _ -> raise X_syntax_error)
+        | _ -> raise X_syntax_error))
+      | _ -> raise X_syntax_error)
 
   (* Sequence-expression parser *)
   | Pair(Symbol("begin"), sexprs) ->
@@ -394,7 +382,7 @@ let rec tag_parse_expression sexpr =
                           | Pair(_, _) -> (Seq(tag_parse_expressions (flatten sexprs)))
                           | _ -> raise (X_this_shouldnt_happen_error "from begin"))
     | Nil -> Const(Void)
-    | _ -> raise (X_syntax_error "from begin")) (* thought that through - (begin . 1) is not legal thus the sexprs cannot be not a pair nor a Nil *)
+    | _ -> raise X_syntax_error) (* thought that through - (begin . 1) is not legal thus the sexprs cannot be not a pair nor a Nil *)
 
   (* Application-expression parser *)
   (*Pair (Pair (Symbol "lambda", Pair (Nil, Pair (Number (Int 3), Nil))), Nil)
@@ -413,7 +401,7 @@ let rec tag_parse_expression sexpr =
       Applic(op, args)
   
   (* All parser failed  *)
-  | _ -> raise (X_lambda_error sexpr)
+  | _ -> raise (X_syntax_error)
 
 
 and tag_parse_expressions sexprs = 
