@@ -67,11 +67,12 @@ let rec find x lst =
     match lst with
     | [] -> raise (X_this_shouldnt_happen_error)
     | h :: t -> if x = h then 0 else 1 + find x t
-
+;;
 let rec tag_bound_or_free var_name bound_lists deep =
   match bound_lists with
   | [] -> Var' (VarFree (var_name))
   | bound_0_list :: rest_bound_lists -> if (List.mem var_name bound_0_list) then Var'(VarBound(var_name , deep ,(find var_name bound_0_list))) else (tag_bound_or_free var_name rest_bound_lists (deep +1))
+;;
 
 let rec lexical expr params_bound_lists =
 match expr with
@@ -88,11 +89,40 @@ match expr with
                     )
 | LambdaSimple (arg_list , body_expr) -> LambdaSimple' (arg_list, (lexical body_expr (arg_list :: params_bound_lists)))
 | LambdaOpt (arg_list , optional_arg ,body_expr) -> LambdaOpt' (arg_list , optional_arg, (lexical body_expr ((arg_list@[optional_arg]) :: params_bound_lists)))                                                                      
+;;
 
+(*let is_tp_or  expr'_list expr' is_tp = if List.nth expr'_list ((List.length expr'_list)-1)= expr' then is_tp else false;;*)
+let get_last_element list = List.hd (List.rev list);;
+let get_all_except_last list = List.rev (List.tl (List.rev list));;
+
+let rec tail_call expr' is_tp =
+match expr' with
+  | Const'(constant) -> Const'(constant)
+  | Var' (var) -> Var' (var)
+  | Applic' (op_expr' , args_expr'_list) -> if is_tp then ApplicTP'((tail_call op_expr' false), (List.map (fun expr'-> (tail_call expr' false)) args_expr'_list))
+                                                     else Applic'((tail_call op_expr' false), (List.map (fun expr'-> (tail_call expr' false)) args_expr'_list))
+  | If' (test_expr' , then_expr' , else_expr') -> If' ((tail_call test_expr' false) , (tail_call then_expr' is_tp) , (tail_call else_expr' is_tp))
+  | Seq' (expr'_list) -> (match expr'_list with 
+                        | []-> Seq'(expr'_list)
+                        | expr'::[] -> Seq'([tail_call expr' is_tp])
+                        | _ -> Seq'( (List.map (fun expr'-> (tail_call expr' false)) (get_all_except_last expr'_list))@[(tail_call (get_last_element expr'_list) is_tp)])
+                        )
+  | Set' (var_expr', val_expr') -> Set'(var_expr', (tail_call val_expr' false))
+  | Def' (var_expr', val_expr') -> Def' (var_expr', (tail_call val_expr' false))
+  | Or'(expr'_list) -> (match expr'_list with 
+                        | []-> Or'(expr'_list)
+                        | expr'::[] -> Or'([tail_call expr' is_tp])
+                        | _ -> Or'( (List.map (fun expr'-> (tail_call expr' false)) (get_all_except_last expr'_list))@[(tail_call (get_last_element expr'_list) is_tp)])
+                        )
+  | LambdaSimple' (param_list , expr') -> LambdaSimple'(param_list , ( tail_call expr' true))
+  | LambdaOpt' (param_list , param_opt , expr') -> LambdaOpt' (param_list , param_opt , ( tail_call expr' true))
+  
+  | _ -> raise X_syntax_error
+  ;;
 
 let annotate_lexical_addresses e = lexical e [];;
 
-let annotate_tail_calls e = raise X_not_yet_implemented;;
+let annotate_tail_calls e = tail_call e false;;
 
 let box_set e = raise X_not_yet_implemented;;
 
