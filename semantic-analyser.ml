@@ -61,7 +61,36 @@ end;;
 
 module Semantics : SEMANTICS = struct
 
-let annotate_lexical_addresses e = raise X_not_yet_implemented;;
+exception X_this_shouldnt_happen_error;;
+
+let rec find x lst =
+    match lst with
+    | [] -> raise (X_this_shouldnt_happen_error)
+    | h :: t -> if x = h then 0 else 1 + find x t
+
+let rec tag_bound_or_free var_name bound_lists deep =
+  match bound_lists with
+  | [] -> Var' (VarFree (var_name))
+  | bound_0_list :: rest_bound_lists -> if (List.mem var_name bound_0_list) then Var'(VarBound(var_name , deep ,(find var_name bound_0_list))) else (tag_bound_or_free var_name rest_bound_lists (deep +1))
+
+let rec lexical expr params_bound_lists =
+match expr with
+| Const (constant) -> Const'(constant)
+| If (test_expr , then_expr , else_expr) -> If'( (lexical test_expr params_bound_lists), ( lexical then_expr params_bound_lists), (lexical else_expr params_bound_lists))
+| Seq (expr_list) -> Seq'(List.map (fun expr -> (lexical expr params_bound_lists)) expr_list)
+| Set (var_expr, val_expr) -> Set'((lexical var_expr params_bound_lists), (lexical val_expr params_bound_lists))
+| Def (var_expr, val_expr) -> Def'((lexical var_expr params_bound_lists), (lexical val_expr params_bound_lists))
+| Or (expr_list) -> Or'(List.map (fun expr -> (lexical expr params_bound_lists)) expr_list)
+| Applic (op_expr, args_expr_list) -> Applic' ((lexical op_expr params_bound_lists) , List.map (fun expr -> (lexical expr params_bound_lists)) args_expr_list)
+| Var (var_name) ->( match params_bound_lists with
+                    | [] -> Var'(VarFree(var_name))
+                    | param_list :: bound_lists ->  if (List.mem var_name param_list) then Var'(VarParam(var_name , (find var_name param_list))) else (tag_bound_or_free var_name bound_lists 0)
+                    )
+| LambdaSimple (arg_list , body_expr) -> LambdaSimple' (arg_list, (lexical body_expr (arg_list :: params_bound_lists)))
+| LambdaOpt (arg_list , optional_arg ,body_expr) -> LambdaOpt' (arg_list , optional_arg, (lexical body_expr ((arg_list@[optional_arg]) :: params_bound_lists)))                                                                      
+
+
+let annotate_lexical_addresses e = lexical e [];;
 
 let annotate_tail_calls e = raise X_not_yet_implemented;;
 
