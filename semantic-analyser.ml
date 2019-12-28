@@ -120,11 +120,98 @@ match expr' with
   | _ -> raise X_syntax_error
   ;;
 
+
+(*make the boxing*)
+let apply_box params_list body_expr' = raise X_not_yet_implemented;;
+
+(*returns (list of get appearance of param , list of set appearance of param)*)
+let rec check_get_set param_string body_expr' counter (get_list, set_list) = 
+(*match body_expr' with
+  | Const'(constant) -> (get_list, set_list)
+  | Var' (var) -> (get_list, set_list)
+  | Applic' (op_expr' , args_expr'_list) -> 
+  | ApplicTP' (op_expr' , args_expr'_list) -> 
+  | If' (test_expr' , then_expr' , else_expr') -> 
+  | Seq' (expr'_list) -> (match expr'_list with 
+                        | []-> 
+                        (* expr'::[] -> Seq'([boxing expr' ])*)
+                        | _ -> 
+                        )
+  | Set' (var_expr', val_expr') -> match var_expr' with 
+                                    | Var' (VarParam (param_string , _)) -> (get_list, [conter] :: set_list )
+                                    | Var' (VarBound (param_string , _)) -> (get_list, [conter] :: set_list )
+                                    | _ -> (get_list, set_list)
+  (*not allowed | Def' (var_expr', val_expr') -> *)
+  | Or'(expr'_list) -> (match expr'_list with 
+                        | []-> 
+                        (* expr'::[] -> Or'([tail_call expr' is_tp])*)
+                        | _ -> 
+                        )
+  | LambdaSimple' (param_list , body_expr') -> 
+  | LambdaOpt' (param_list , param_opt , body_expr') -> 
+  
+  | _ -> raise X_syntax_error
+*)
+raise X_not_yet_implemented
+;;
+
+(*returns true if get & set do not share same rib - means we should box*)
+let check_lists_unshared_rib get_list set_list = 
+let ancestors_get = List.map (fun ancestor_lst -> List.hd ancestor_lst) get_list in
+let ancestors_set = List.map (fun ancestor_lst -> List.hd ancestor_lst) set_list in
+(ormap (fun ancestor_get -> (ormap (fun ancestor_set -> if (ancestor_set = ancestor_get) then false else true )  ancestors_set)
+        )
+        ancestors_get);;
+
+let should_box param_string body_expr' =  
+let get_set = (check_get_set param_string body_expr' 0 ([] ,[])) in
+match get_set with 
+| ([], _) -> false 
+| (_, []) -> false
+| (get_list, set_list) -> ( check_lists_unshared_rib get_list set_list )                           
+;;
+
+(*returns new boxes body if needed *)
+let rec box_lambda_simple  param_list body_expr' = 
+  let params_need_boxing = List.filter (fun param -> should_box param body_expr') param_list in
+  match params_need_boxing with
+  | [] -> body_expr'
+  | _ -> apply_box params_need_boxing body_expr'
+  ;;
+
+let rec box_lambda_opt  param_list param_opt body_expr' = raise X_not_yet_implemented;;
+
+let rec boxing expr' =
+match expr' with
+  | Const'(constant) -> Const'(constant)
+  | Var' (var) -> Var' (var)
+  | Applic' (op_expr' , args_expr'_list) -> Applic' ((boxing op_expr') , List.map (fun expr' -> boxing expr') args_expr'_list)
+  | ApplicTP' (op_expr' , args_expr'_list) -> ApplicTP' ((boxing op_expr') , List.map (fun expr' -> boxing expr') args_expr'_list)
+  | If' (test_expr' , then_expr' , else_expr') -> If' ((boxing test_expr') , (boxing then_expr' ) , (boxing else_expr'))
+  | Seq' (expr'_list) -> (match expr'_list with 
+                        | []-> Seq'(expr'_list)
+                        (* expr'::[] -> Seq'([boxing expr' ])*)
+                        | _ -> Seq'( List.map (fun expr' -> boxing expr') expr'_list)
+                        )
+  | Set' (var_expr', val_expr') -> Set'(var_expr', (boxing val_expr'))
+  | Def' (var_expr', val_expr') -> Def'(var_expr', (boxing val_expr'))
+  | Or'(expr'_list) -> (match expr'_list with 
+                        | []-> Or'(expr'_list)
+                        (* expr'::[] -> Or'([tail_call expr' is_tp])*)
+                        | _ -> Or'( List.map (fun expr' -> boxing expr') expr'_list)
+                        )
+  | LambdaSimple' (param_list , body_expr') -> LambdaSimple'(param_list , ( box_lambda_simple  param_list body_expr'))
+  | LambdaOpt' (param_list , param_opt , body_expr') -> LambdaOpt' (param_list , param_opt , ( box_lambda_opt  param_list param_opt body_expr'))
+  
+  | _ -> raise X_syntax_error
+  ;;
+
+
 let annotate_lexical_addresses e = lexical e [];;
 
 let annotate_tail_calls e = tail_call e false;;
 
-let box_set e = raise X_not_yet_implemented;;
+let box_set e = boxing e;;
 
 let run_semantics expr =
   box_set
