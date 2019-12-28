@@ -120,39 +120,57 @@ match expr' with
   | _ -> raise X_syntax_error
   ;;
 
+let merge_get_set list = List.fold_left (fun (curr_get, curr_set) (acc_get, acc_set) -> (curr_get @ acc_get, curr_set @ acc_set)) ([],[]) list;;
 
 (*make the boxing*)
 let apply_box params_list body_expr' = raise X_not_yet_implemented;;
 
+
+let counter = ref 0;;
 (*returns (list of get appearance of param , list of set appearance of param)*)
-let rec check_get_set param_string body_expr' counter (get_list, set_list) = 
-(*match body_expr' with
+let rec check_get_set param_string body_expr' (get_list, set_list) = 
+match body_expr' with
   | Const'(constant) -> (get_list, set_list)
-  | Var' (var) -> (get_list, set_list)
-  | Applic' (op_expr' , args_expr'_list) -> 
-  | ApplicTP' (op_expr' , args_expr'_list) -> 
-  | If' (test_expr' , then_expr' , else_expr') -> 
+  | Var' (var) -> (match var with 
+                  | VarParam (param_string , _) -> ([!counter] :: get_list, set_list )
+                  | VarBound (param_string , _, _) -> ([!counter] :: get_list, set_list )
+                  | _ -> (get_list, set_list))
+  | Set' (var_expr', val_expr') ->( match var_expr' with 
+                    | Var' (VarParam (param_string , _)) -> (get_list, [!counter] :: set_list )
+                    | Var' (VarBound (param_string , _,_)) -> (get_list, [!counter] :: set_list )
+                    | _ -> (get_list, set_list))
+  | Applic' (op_expr' , args_expr'_list) -> (let get_set_in_args = List.map (fun arg -> (check_get_set param_string arg ([], [])) ) args_expr'_list in
+                                            let get_set_in_op = (check_get_set param_string op_expr' ([], [])) in
+                                            let get_set_lists = (get_set_in_op :: get_set_in_args) in
+                                            let get_set = merge_get_set get_set_lists in 
+                                            get_set)(*not sure if needs to check for special case of lambda in args *)
+  (*| ApplicTP' (op_expr' , args_expr'_list) -> *)
+  | If' (test_expr' , then_expr' , else_expr') -> (check_get_set param_string (Seq'([test_expr' ; then_expr' ; else_expr'])) (get_list, set_list))
   | Seq' (expr'_list) -> (match expr'_list with 
-                        | []-> 
+                        | []-> (get_list, set_list)
                         (* expr'::[] -> Seq'([boxing expr' ])*)
                         | _ -> 
                         )
-  | Set' (var_expr', val_expr') -> match var_expr' with 
-                                    | Var' (VarParam (param_string , _)) -> (get_list, [conter] :: set_list )
-                                    | Var' (VarBound (param_string , _)) -> (get_list, [conter] :: set_list )
-                                    | _ -> (get_list, set_list)
-  (*not allowed | Def' (var_expr', val_expr') -> *)
+    (*not allowed | Def' (var_expr', val_expr') -> *)
+  (*
   | Or'(expr'_list) -> (match expr'_list with 
                         | []-> 
                         (* expr'::[] -> Or'([tail_call expr' is_tp])*)
                         | _ -> 
                         )
-  | LambdaSimple' (param_list , body_expr') -> 
+  *)
+  | LambdaSimple' (param_list , body) -> (if (List.mem param_string param_list) 
+                                                then (get_list, set_list) 
+                                                else (begin
+                                                      counter := !counter +1;
+                                                      check_get_set param_string body (get_list, set_list)
+                                                     end)
+                                          )
+  (*
   | LambdaOpt' (param_list , param_opt , body_expr') -> 
-  
+  *)
   | _ -> raise X_syntax_error
-*)
-raise X_not_yet_implemented
+(*raise X_not_yet_implemented*)
 ;;
 
 (*returns true if get & set do not share same rib - means we should box*)
@@ -164,11 +182,14 @@ let ancestors_set = List.map (fun ancestor_lst -> List.hd ancestor_lst) set_list
         ancestors_get);;
 
 let should_box param_string body_expr' =  
-let get_set = (check_get_set param_string body_expr' 0 ([] ,[])) in
+begin
+counter := 0 ;
+let get_set = (check_get_set param_string body_expr' ([] ,[])) in
 match get_set with 
 | ([], _) -> false 
 | (_, []) -> false
-| (get_list, set_list) -> ( check_lists_unshared_rib get_list set_list )                           
+| (get_list, set_list) -> ( check_lists_unshared_rib get_list set_list )    
+end                       
 ;;
 
 (*returns new boxes body if needed *)
@@ -200,8 +221,8 @@ match expr' with
                         (* expr'::[] -> Or'([tail_call expr' is_tp])*)
                         | _ -> Or'( List.map (fun expr' -> boxing expr') expr'_list)
                         )
-  | LambdaSimple' (param_list , body_expr') -> LambdaSimple'(param_list , ( box_lambda_simple  param_list body_expr'))
-  | LambdaOpt' (param_list , param_opt , body_expr') -> LambdaOpt' (param_list , param_opt , ( box_lambda_opt  param_list param_opt body_expr'))
+  | LambdaSimple' (param_list , body_expr') -> LambdaSimple'(param_list ,(boxing ( box_lambda_simple  param_list body_expr')) )
+  | LambdaOpt' (param_list , param_opt , body_expr') -> LambdaOpt' (param_list , param_opt ,(boxing ( box_lambda_opt  param_list param_opt body_expr')))
   
   | _ -> raise X_syntax_error
   ;;
