@@ -315,3 +315,429 @@ _assert 23
     LambdaSimple ([], Set (Var "x", Var "x"))])
 )
 (LambdaSimple' (["x"], Seq' ([Set' (Var' (VarParam ("x", 0)), Box' (VarParam ("x", 0)));Seq' ([BoxGet' (VarParam ("x", 0));LambdaSimple' (["x"], Seq' ([Set' (Var' (VarFree "y"), Var' (VarParam ("x", 0)));LambdaSimple' ([], Var' (VarBound ("x", 0, 0)))]));LambdaSimple' ([], BoxSet' (VarBound ("x", 0, 0), BoxGet' (VarBound ("x", 0, 0))))])])));;
+
+_assert 24
+(LambdaSimple (["x"; "y"; "z"],
+  Seq
+   [Set (Var "z", Const (Sexpr (Number (Int 1))));
+    LambdaSimple ([], Var "z")])
+)
+(LambdaSimple' (["x"; "y"; "z"], 
+  Seq' 
+    [Set' (Var' (VarParam ("z", 2)), Box' (VarParam ("z", 2))); 
+    Seq'
+      [BoxSet' (VarParam("z", 2), Const' (Sexpr (Number (Int 1))));
+      LambdaSimple' ([], BoxGet' (VarBound("z",0, 2)))]]));;
+
+_assert 25
+(LambdaSimple (["x"; "y"; "z"],
+  Seq
+   [LambdaSimple (["x"], Var "x");
+   LambdaSimple([], Set(Var("x"), Var("y")))])
+)
+(LambdaSimple' (["x"; "y"; "z"],
+  Seq'
+   [LambdaSimple' (["x"], Var'(VarParam("x",0)));
+   LambdaSimple'([], Set'(Var'(VarBound("x",0,0)), Var'(VarBound("y",0,1))))])
+);;
+
+_assert 26
+(LambdaSimple (["x"; "y"; "z"],
+  Seq
+   [Var "x";
+   LambdaSimple (["x"], Var "x");
+   LambdaSimple([], Set(Var("x"), Var("y")))])
+)
+(LambdaSimple' (["x"; "y"; "z"],
+  Seq'
+    [Set' (Var'(VarParam ("x", 0)), Box' (VarParam ("x", 0))); 
+    Seq'
+      [BoxGet'(VarParam("x", 0));
+      LambdaSimple' (["x"], Var'(VarParam("x",0)));
+      LambdaSimple'([], BoxSet'(VarBound("x",0,0), Var'(VarBound("y",0,1))))]])
+);;
+
+_assert 27
+(LambdaSimple (["x"; "y"; "z"],
+  Seq
+   [Var "x";
+    Var "y";
+   LambdaSimple (["x"], Var "x");
+   LambdaSimple([], Seq
+                      [Set(Var("x"), Var("y"));
+                        Set(Var ("y"), Var ("z"))])])
+)
+(LambdaSimple' (["x"; "y"; "z"],
+  Seq'
+    [Set' (Var'(VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+     Set' (Var' (VarParam ("y", 1)), Box' (VarParam ("y", 1))); 
+    Seq'
+      [BoxGet'(VarParam("x", 0));
+      BoxGet'(VarParam("y", 1));
+      LambdaSimple' (["x"], Var'(VarParam("x",0)));
+      LambdaSimple'([], Seq' 
+                        [BoxSet'(VarBound("x",0,0), BoxGet'(VarBound("y",0,1)));
+                          BoxSet'(VarBound("y",0,1), Var'(VarBound("z",0,2)))])]])
+);;
+
+_assert 28
+(LambdaSimple (["x"; "y"; "z"],
+  Seq
+   [Var "x";
+   LambdaSimple([], LambdaSimple([] , Var "y"));
+   LambdaSimple (["x"], Var "x");
+   LambdaSimple([], Seq
+                      [Set(Var("x"), Var("y"));
+                        Set(Var ("y"), Var ("z"))])])
+)
+(LambdaSimple' (["x"; "y"; "z"],
+  Seq'
+    [Set' (Var'(VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+     Set' (Var' (VarParam ("y", 1)), Box' (VarParam ("y", 1))); 
+    Seq'
+      [BoxGet'(VarParam("x", 0));
+      LambdaSimple'([],LambdaSimple'([], BoxGet'(VarBound("y", 1, 1))));
+      LambdaSimple' (["x"], Var'(VarParam("x",0)));
+      LambdaSimple'([], Seq' 
+                        [BoxSet'(VarBound("x",0,0), BoxGet'(VarBound("y",0,1)));
+                          BoxSet'(VarBound("y",0,1), Var'(VarBound("z",0,2)))])]])
+);;
+
+_assert 29
+(
+  LambdaSimple (["x"], Seq [
+    Set (Var ("x"), Const(Sexpr (Number (Int 3))));
+    LambdaSimple (["y"], Var "x")
+  ])
+)
+(
+  LambdaSimple' (["x"], Seq' [Set' (Var'(VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Seq' [
+    BoxSet' (VarParam ("x", 0), Const'(Sexpr (Number (Int 3))));
+    LambdaSimple' (["y"], BoxGet' (VarBound ("x", 0,0)))
+  ]])
+);;
+
+
+_assert 30
+(
+  LambdaSimple (["x"], Seq [
+    Set (Var ("x"), Const(Sexpr (Number (Int 3))));
+    LambdaSimple (["y"], Seq [
+      Applic (Var "y" , [Var "x"]);
+      Const(Sexpr(Number(Int 3)))])
+  ])
+)
+(
+  LambdaSimple' (["x"], Seq' [Set' (Var'(VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Seq' [
+    BoxSet' (VarParam ("x", 0), Const'(Sexpr (Number (Int 3))));
+    LambdaSimple' (["y"], Seq' [
+                            Applic' (Var' (VarParam ("y", 0)) , [BoxGet' (VarBound ("x", 0,0))]);
+                            Const'(Sexpr(Number (Int 3)))])
+  ]])
+);;
+
+_assert 31
+(
+  LambdaSimple (["x"], Seq [
+    Set (Var ("x"), Const(Sexpr (Number (Int 3))));
+    LambdaSimple (["y"], Applic (Var "y" , [Var "x"]))
+  ])
+)
+(
+  LambdaSimple' (["x"], Seq' [Set' (Var'(VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Seq' [
+    BoxSet' (VarParam ("x", 0), Const'(Sexpr (Number (Int 3))));
+    LambdaSimple' (["y"], ApplicTP' (Var' (VarParam ("y", 0)) , [BoxGet' (VarBound ("x", 0,0))]))
+  ]])
+);;
+
+
+
+_assert 32
+(
+  Applic (LambdaSimple (["x"], Seq [
+    Set (Var ("x"), Const(Sexpr (Number (Int 3))));
+    LambdaSimple (["y"], Applic (Var "y" , [Var "x"]))
+  ]), [Const(Sexpr(Number(Int 2)))])
+)
+(
+  Applic' (LambdaSimple' (["x"], Seq' [Set' (Var'(VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Seq' [
+    BoxSet' (VarParam ("x", 0), Const'(Sexpr (Number (Int 3))));
+    LambdaSimple' (["y"], ApplicTP' (Var' (VarParam ("y", 0)) , [BoxGet' (VarBound ("x", 0,0))]))
+  ]]), [Const'(Sexpr(Number(Int 2)))])
+);;
+
+
+_assert 33
+(
+  Applic (LambdaSimple (["z" ; "x"], Seq [
+    Set (Var ("x"), Const(Sexpr (Number (Int 3))));
+    LambdaSimple (["y"], Applic (Var "y" , [Var "x"]))
+  ]), [Const(Sexpr(Number(Int 2)))])
+)
+(
+  Applic' (LambdaSimple' (["z";"x"], Seq' [Set' (Var'(VarParam ("x", 1)), Box' (VarParam ("x", 1)));
+  Seq' [
+    BoxSet' (VarParam ("x", 1), Const'(Sexpr (Number (Int 3))));
+    LambdaSimple' (["y"], ApplicTP' (Var' (VarParam ("y", 0)) , [BoxGet' (VarBound ("x", 0,1))]))
+  ]]), [Const'(Sexpr(Number(Int 2)))])
+);;
+
+
+
+_assert 34
+(Applic
+  (LambdaSimple (["x"],
+    If (Applic (Var "x", [Const (Sexpr (Number (Int 1)))]),
+     Applic (Var "x", [Const (Sexpr (Number (Int 2)))]),
+     Applic
+      (LambdaSimple (["y"], Set (Var "x", Const (Sexpr (Number (Int 0))))),
+      [Const (Sexpr (Number (Int 3)))]))),
+  [LambdaSimple (["x"], Var "x")])
+)
+(Applic' 
+  (LambdaSimple' (["x"], Seq' [Set' (Var'(VarParam ("x", 0)), Box' (VarParam("x", 0))); 
+     If' (Applic' (BoxGet' (VarParam ("x", 0)), [Const' (Sexpr (Number (Int (1))))]), 
+          ApplicTP' (BoxGet' (VarParam ("x", 0)), [Const' (Sexpr (Number (Int (2))))]), 
+          ApplicTP' (LambdaSimple' (["y"], 
+                      BoxSet' (VarBound ("x", 0, 0), Const' (Sexpr (Number (Int (0)))))), 
+          [Const' (Sexpr (Number (Int (3))))]))]), 
+    [LambdaSimple' (["x"], Var' (VarParam ("x", 0)))]));;
+
+_assert 35
+(
+  LambdaSimple (["x"], Or [
+    Set (Var ("x"), Const(Sexpr (Number (Int 3))));
+    LambdaSimple (["y"], Var "x")
+  ])
+)
+(
+  LambdaSimple' (["x"], Seq' [Set' (Var'(VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Or' [
+    BoxSet' (VarParam ("x", 0), Const'(Sexpr (Number (Int 3))));
+    LambdaSimple' (["y"], BoxGet' (VarBound ("x", 0,0)))
+  ]])
+);;
+
+_assert 36
+(LambdaSimple (["x"],
+  Or
+   [Applic
+     (LambdaOpt (["y"], "z",
+       Seq[
+       Set(Var "z", Const(Sexpr(Number (Int 1))));
+       Applic
+        (LambdaSimple ([],
+          Applic (LambdaSimple ([], Applic (Var "+", [Var "x"; Var "z"])), [])),
+        [])]),
+     [Var "x"; Const (Sexpr (Number (Int 1)))]);
+    LambdaSimple ([], Set (Var "x", Var "w")); Applic (Var "w", [Var "w"])])
+)
+(LambdaSimple' (["x"], 
+  Seq' ([Set' (Var' (VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Or' ([Applic' (LambdaOpt' (["y"], "z",   Seq' [Set' (Var' (VarParam ("z", 1)), Box' (VarParam ("z", 1))); 
+                Seq'[ BoxSet' (VarParam ("z", 1), Const'(Sexpr(Number(Int 1))));
+                  ApplicTP' (LambdaSimple' ([], 
+                    ApplicTP' (LambdaSimple' ([], 
+                      ApplicTP' (Var' (VarFree "+"), [BoxGet' (VarBound ("x", 2, 0));BoxGet' (VarBound ("z", 1, 1))])), 
+                    [])),[]) 
+                  ]]), 
+          [BoxGet' (VarParam ("x", 0)); 
+           Const' (Sexpr (Number (Int (1))))]);
+      LambdaSimple' ([], 
+        BoxSet' (VarBound ("x", 0, 0), Var' (VarFree "w")));
+      ApplicTP' (Var' (VarFree "w"), [Var' (VarFree "w")])])])));;
+
+_assert 37
+(LambdaSimple (["x"],
+  Or
+   [Applic
+     (LambdaOpt (["y"], "z",
+       Seq[
+       Set(Var "z", Const(Sexpr(Number (Int 1))));
+       Set(Var "y", Const(Sexpr(Number (Int 2))));
+       Applic
+        (LambdaSimple ([],
+          Applic (LambdaSimple ([], Applic (Var "+", [Var "x"; Var "y"; Var "z"])), [])),
+        [])]),
+     [Var "x"; Const (Sexpr (Number (Int 1)))]);
+    LambdaSimple ([], Set (Var "x", Var "w")); Applic (Var "w", [Var "w"])])
+)
+(LambdaSimple' (["x"], 
+  Seq' ([Set' (Var' (VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Or' ([Applic' (LambdaOpt' (["y"], "z",   Seq' [ Set' (Var' (VarParam ("y", 0)), Box' (VarParam ("y", 0))); Set' (Var' (VarParam ("z", 1)), Box' (VarParam ("z", 1))); 
+                Seq'[ BoxSet' (VarParam ("z", 1), Const'(Sexpr(Number(Int 1)))); BoxSet' (VarParam ("y", 0), Const'(Sexpr(Number(Int 2))));
+                  ApplicTP' (LambdaSimple' ([], 
+                    ApplicTP' (LambdaSimple' ([], 
+                      ApplicTP' (Var' (VarFree "+"), [BoxGet' (VarBound ("x", 2, 0));BoxGet' (VarBound ("y", 1, 0)); BoxGet' (VarBound ("z", 1, 1))])), 
+                    [])),[]) 
+                  ]]), 
+          [BoxGet' (VarParam ("x", 0)); 
+           Const' (Sexpr (Number (Int (1))))]);
+      LambdaSimple' ([], 
+        BoxSet' (VarBound ("x", 0, 0), Var' (VarFree "w")));
+      ApplicTP' (Var' (VarFree "w"), [Var' (VarFree "w")])])])));;
+
+_assert 38
+(LambdaSimple (["x"],
+  Seq [
+        Applic (Var "x", []); 
+        Set (Var "x", Applic (Var "x", []));
+        LambdaSimple(["x"], Var "x")
+      ])
+)
+(LambdaSimple' (["x"], 
+  Seq' ([
+          Applic' (Var' (VarParam ("x", 0)), []);
+          Set' (Var' (VarParam ("x", 0)), Applic' (Var' (VarParam ("x", 0)), []));
+          LambdaSimple' (["x"], Var' (VarParam ("x", 0)))
+        ])));;
+
+_assert 39
+(LambdaSimple (["x"],
+  Seq [
+        Applic (Var "x", []); 
+        Set (Var "x", Applic (Var "x", []));
+        LambdaSimple([""], Var "x")
+      ])
+)
+(LambdaSimple' (["x"], Seq' [Set' (Var'( VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Seq' ([
+          Applic' (BoxGet' (VarParam ("x", 0)), []);
+          BoxSet' (VarParam ("x", 0), Applic' (BoxGet' (VarParam ("x", 0)), []));
+          LambdaSimple' ([""], BoxGet' (VarBound ("x", 0, 0)))
+        ])
+]));;
+
+_assert 40
+(LambdaSimple (["x"],
+  Seq [
+        Applic (Var "x", []); 
+        LambdaSimple([""], Var "x")
+      ])
+)
+(LambdaSimple' (["x"], 
+  Seq' ([
+          Applic' (Var' (VarParam ("x", 0)), []);
+          LambdaSimple' ([""], Var' (VarBound ("x", 0,0)))
+        ])));;
+
+_assert 41
+(LambdaSimple (["x"],
+  Seq [
+        Set (Var "x", Const(Sexpr(Number(Int 1)))); 
+        LambdaSimple([""], Set (Var "x", Const(Sexpr(Number(Int 3)))))
+      ])
+)
+(LambdaSimple' (["x"], 
+  Seq' ([
+          Set' (Var'(VarParam ("x", 0)), Const'(Sexpr(Number(Int 1)))); 
+          LambdaSimple' ([""], Set' (Var'(VarBound ("x", 0, 0)), Const'(Sexpr(Number(Int 3)))))
+        ])));;
+
+_assert 42
+(LambdaSimple (["x"],
+  Seq [
+        Set (Var "x", Const(Sexpr(Number(Int 1)))); 
+        Var "x";
+        LambdaSimple(["x"], 
+        Seq[
+            Var "x";
+            Set (Var "x", Const(Sexpr(Number(Int 3))))
+          ])
+      ])
+)
+(LambdaSimple' (["x"], 
+  Seq' ([
+          Set' (Var'(VarParam ("x", 0)), Const'(Sexpr(Number(Int 1)))); 
+          Var' (VarParam("x", 0));
+          LambdaSimple' (["x"], 
+            Seq'[
+              Var' (VarParam("x", 0));
+              Set' (Var'(VarParam ("x", 0)), Const'(Sexpr(Number(Int 3))))
+            ])
+        ])));;
+
+_assert 43
+(LambdaSimple (["x"],
+  Seq [
+        Set (Var "x", Const(Sexpr(Number(Int 1)))); 
+        Var "x";
+        LambdaSimple([""], 
+        Seq[
+            Var "x";
+            Set (Var "x", Const(Sexpr(Number(Int 3))))
+          ])
+      ])
+)
+(LambdaSimple' (["x"], Seq'[Set' (Var'( VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+  Seq' ([
+          BoxSet'(VarParam ("x", 0), Const'(Sexpr(Number(Int 1)))); 
+          BoxGet'(VarParam("x", 0));
+          LambdaSimple' ([""], 
+            Seq'[
+              BoxGet'(VarBound("x",0, 0));
+              BoxSet' (VarBound ("x",0 ,0), Const'(Sexpr(Number(Int 3))))
+            ])
+        ])]));;
+
+_assert 44
+(LambdaSimple (["x"], 
+Seq[
+  Set (Var "x",  Const(Sexpr(Number(Int 1))));
+  LambdaSimple([], 
+    LambdaSimple([], 
+      LambdaSimple([],
+        LambdaSimple([], 
+          LambdaSimple([], 
+            LambdaSimple([], 
+              LambdaSimple([], Var "x")))))))
+  ])
+)
+(LambdaSimple' (["x"], Seq' [Set' (Var'( VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+Seq'[
+  BoxSet' (VarParam ("x",0), Const'(Sexpr(Number(Int 1))));
+  LambdaSimple'([], 
+    LambdaSimple'([], 
+      LambdaSimple'([],
+        LambdaSimple'([], 
+          LambdaSimple'([], 
+            LambdaSimple'([], 
+              LambdaSimple'([], BoxGet'(VarBound("x", 6, 0)))))))))
+  ]])
+);;
+
+_assert 45
+(LambdaSimple (["x"], 
+Seq[
+  Set (Var "x",  Const(Sexpr(Number(Int 1))));
+  LambdaSimple(["a"], Seq[Set (Var "a",  Const(Sexpr(Number(Int 2)))); 
+    LambdaSimple([], 
+      LambdaSimple([],
+        LambdaSimple([], 
+          LambdaSimple([], 
+            LambdaSimple([], 
+              LambdaSimple([], 
+                Seq[
+                  Var "x";
+                  Var "a"
+                ]))))))])
+  ])
+)
+(LambdaSimple' (["x"], Seq' [Set' (Var'( VarParam ("x", 0)), Box' (VarParam ("x", 0)));
+Seq'[
+  BoxSet' (VarParam ("x",0), Const'(Sexpr(Number(Int 1))));
+  LambdaSimple'(["a"],   Seq' [Set' (Var'( VarParam ("a", 0)), Box' (VarParam ("a", 0))); Seq'[ BoxSet' (VarParam ("a",0), Const'(Sexpr(Number(Int 2))));
+    LambdaSimple'([], 
+      LambdaSimple'([],
+        LambdaSimple'([], 
+          LambdaSimple'([], 
+            LambdaSimple'([], 
+              LambdaSimple'([], Seq' [BoxGet'(VarBound("x", 6, 0));
+                                      BoxGet'(VarBound("a", 5, 0))
+                                     ]))))))]])
+  ]])
+);;
