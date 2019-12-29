@@ -124,10 +124,8 @@ match expr' with
 let merge_get_set list = List.fold_left (fun (curr_get, curr_set) (acc_get, acc_set) -> (curr_get @ acc_get, curr_set @ acc_set)) ([],[]) list;;
 
 (*make the boxing*)
-let apply_box params_need_boxing origin_param_list body_expr' = 
-let set_params = List.map (fun str_name -> Set'(VarParam(str_name, (find str_name origin_param_list)), Box'(VarParam(str_name,(find str_name origin_param_list) )))) params_need_boxing in
-let boxed_body = 
-(match body_expr' with
+let apply_box_body params_need_boxing body_expr' = 
+match body_expr' with
   | Const'(constant) -> Const'(constant)
   | Var'(VarFree(var_name)) -> Var'(VarFree(var_name))
   | Var'(VarParam (var_name, minor)) -> if (List.mem var_name params_need_boxing)
@@ -136,26 +134,34 @@ let boxed_body =
   | Var'(VarBound (var_name, major, minor)) -> if (List.mem var_name params_need_boxing)
                                               then BoxGet'(VarBound (var_name, major, minor))
                                               else Var'(VarBound (var_name, major, minor))
-  | Applic' (op_expr' , args_expr'_list) -> Applic' ((boxing op_expr') , List.map (fun expr' -> boxing expr') args_expr'_list)
-  | ApplicTP' (op_expr' , args_expr'_list) -> ApplicTP' ((boxing op_expr') , List.map (fun expr' -> boxing expr') args_expr'_list)
-  | If' (test_expr' , then_expr' , else_expr') -> If' ((boxing test_expr') , (boxing then_expr' ) , (boxing else_expr'))
+  | Applic' (op_expr' , args_expr'_list) -> Applic' ((apply_box_body op_expr') , List.map (fun expr' -> apply_box_body expr') args_expr'_list)
+  | ApplicTP' (op_expr' , args_expr'_list) -> ApplicTP' ((apply_box_body op_expr') , List.map (fun expr' -> apply_box_body expr') args_expr'_list)
+  | If' (test_expr' , then_expr' , else_expr') -> If' ((apply_box_body test_expr') , (apply_box_body then_expr' ) , (apply_box_body else_expr'))
   | Seq' (expr'_list) -> (match expr'_list with 
                         | []-> Seq'(expr'_list)
                         (* expr'::[] -> Seq'([boxing expr' ])*)
-                        | _ -> Seq'( List.map (fun expr' -> boxing expr') expr'_list)
+                        | _ -> Seq'( List.map (fun expr' -> apply_box_body expr') expr'_list)
                         )
-  | Set' (var_expr', val_expr') -> Set'(var_expr', (boxing val_expr'))
-  | Def' (var_expr', val_expr') -> Def'(var_expr', (boxing val_expr'))
+  | Set' (var_expr', val_expr') -> (match var_expr' with
+                                        if (List.mem var_name params_need_boxing)
+                                        then BoxGet'(VarParam (var_name, minor))
+                                        else Set'(var_expr', (boxing val_expr')))
+                                       
   | Or'(expr'_list) -> (match expr'_list with 
                         | []-> Or'(expr'_list)
                         (* expr'::[] -> Or'([tail_call expr' is_tp])*)
-                        | _ -> Or'( List.map (fun expr' -> boxing expr') expr'_list)
+                        | _ -> Or'( List.map (fun expr' -> apply_box_body expr') expr'_list)
                         )
   | LambdaSimple' (param_list , body_expr') -> LambdaSimple'(param_list ,(boxing ( box_lambda_simple  param_list body_expr')) )
   | LambdaOpt' (param_list , param_opt , body_expr') -> LambdaOpt' (param_list , param_opt ,(boxing ( box_lambda_opt  param_list param_opt body_expr')))
   
   | _ -> raise X_syntax_error
-)in
+;;
+
+
+let apply_box params_need_boxing origin_param_list body_expr' = 
+let set_params = List.map (fun str_name -> Set'(Var'(VarParam(str_name, (find str_name origin_param_list))), Box'(VarParam(str_name,(find str_name origin_param_list) )))) params_need_boxing in
+let boxed_body = apply_box_body params_need_boxing body_expr' in
 Seq'(set_params@boxed_body)
 ;;
 
