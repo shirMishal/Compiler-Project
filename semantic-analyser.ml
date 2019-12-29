@@ -138,8 +138,8 @@ let rec check_get_set param_string body_expr' counter (get_list, set_list) =
                         | _ -> 
                         )
   | Set' (var_expr', val_expr') -> match var_expr' with 
-                                    | Var' (VarParam (param_string , _)) -> (get_list, [conter] :: set_list )
-                                    | Var' (VarBound (param_string , _)) -> (get_list, [conter] :: set_list )
+                                    | Var' (VarParam (param_string , _)) -> (get_list, [counter] :: set_list )
+                                    | Var' (VarBound (param_string , _)) -> (get_list, [counter] :: set_list )
                                     | _ -> (get_list, set_list)
   (*not allowed | Def' (var_expr', val_expr') -> *)
   | Or'(expr'_list) -> (match expr'_list with 
