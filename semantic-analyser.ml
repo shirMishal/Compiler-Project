@@ -57,6 +57,7 @@ module type SEMANTICS = sig
   val annotate_lexical_addresses : expr -> expr'
   val annotate_tail_calls : expr' -> expr'
   val box_set : expr' -> expr'
+  val test : string -> expr'
 end;;
 
 module Semantics : SEMANTICS = struct
@@ -120,39 +121,57 @@ match expr' with
   | _ -> raise X_syntax_error
   ;;
 
+let merge_get_set list = List.fold_left (fun (curr_get, curr_set) (acc_get, acc_set) -> (curr_get @ acc_get, curr_set @ acc_set)) ([],[]) list;;
 
 (*make the boxing*)
 let apply_box params_list body_expr' = raise X_not_yet_implemented;;
 
+
+let counter = ref 0;;
 (*returns (list of get appearance of param , list of set appearance of param)*)
-let rec check_get_set param_string body_expr' counter (get_list, set_list) = 
-(*match body_expr' with
+let rec check_get_set param_string body_expr' (get_list, set_list) = 
+match body_expr' with
   | Const'(constant) -> (get_list, set_list)
-  | Var' (var) -> (get_list, set_list)
-  | Applic' (op_expr' , args_expr'_list) -> 
-  | ApplicTP' (op_expr' , args_expr'_list) -> 
-  | If' (test_expr' , then_expr' , else_expr') -> 
+  | Var' (var) -> (match var with 
+                  | VarParam (param_string , _) -> ([!counter] :: get_list, set_list )
+                  | VarBound (param_string , _, _) -> ([!counter] :: get_list, set_list )
+                  | _ -> (get_list, set_list))
+  | Set' (var_expr', val_expr') ->( match var_expr' with 
+                    | Var' (VarParam (param_string , _)) -> (get_list, [!counter] :: set_list )
+                    | Var' (VarBound (param_string , _,_)) -> (get_list, [!counter] :: set_list )
+                    | _ -> (get_list, set_list))
+  | Applic' (op_expr' , args_expr'_list) -> (let get_set_in_args = List.map (fun arg -> (check_get_set param_string arg ([], [])) ) args_expr'_list in
+                                            let get_set_in_op = (check_get_set param_string op_expr' ([], [])) in
+                                            let get_set_lists = (get_set_in_op :: get_set_in_args) in
+                                            let get_set = merge_get_set get_set_lists in 
+                                            get_set)(*not sure if needs to check for special case of lambda in args *)
+  (*| ApplicTP' (op_expr' , args_expr'_list) -> *)
+  | If' (test_expr' , then_expr' , else_expr') -> (check_get_set param_string (Seq'([test_expr' ; then_expr' ; else_expr'])) (get_list, set_list))
   | Seq' (expr'_list) -> (match expr'_list with 
-                        | []-> 
+                        | []-> (get_list, set_list)
                         (* expr'::[] -> Seq'([boxing expr' ])*)
-                        | _ -> 
+                        | _ -> (get_list, set_list)
                         )
-  | Set' (var_expr', val_expr') -> match var_expr' with 
-                                    | Var' (VarParam (param_string , _)) -> (get_list, [counter] :: set_list )
-                                    | Var' (VarBound (param_string , _)) -> (get_list, [counter] :: set_list )
-                                    | _ -> (get_list, set_list)
-  (*not allowed | Def' (var_expr', val_expr') -> *)
+    (*not allowed | Def' (var_expr', val_expr') -> *)
+  (*
   | Or'(expr'_list) -> (match expr'_list with 
                         | []-> 
                         (* expr'::[] -> Or'([tail_call expr' is_tp])*)
                         | _ -> 
                         )
-  | LambdaSimple' (param_list , body_expr') -> 
+  *)
+  | LambdaSimple' (param_list , body) -> (if (List.mem param_string param_list) 
+                                                then (get_list, set_list) 
+                                                else (begin
+                                                      counter := !counter +1;
+                                                      check_get_set param_string body (get_list, set_list)
+                                                     end)
+                                          )
+  (*
   | LambdaOpt' (param_list , param_opt , body_expr') -> 
-  
+  *)
   | _ -> raise X_syntax_error
-*)
-raise X_not_yet_implemented
+(*raise X_not_yet_implemented*)
 ;;
 
 (*returns true if get & set do not share same rib - means we should box*)
@@ -163,13 +182,92 @@ let ancestors_set = List.map (fun ancestor_lst -> List.hd ancestor_lst) set_list
         )
         ancestors_get);;
 
-let should_box param_string body_expr' =  
-let get_set = (check_get_set param_string body_expr' 0 ([] ,[])) in
-match get_set with 
-| ([], _) -> false 
-| (_, []) -> false
-| (get_list, set_list) -> ( check_lists_unshared_rib get_list set_list )                           
+
+type had_read_write = 
+| R
+| W
+| RW
+| NOTHING;;
+
+let rw_union rep_list =
+  let rw_union_two rep1 rep2 =
+  (match rep1 with
+  | RW -> RW
+  | NOTHING -> rep2
+  | _ -> if (rep1 == rep2) then rep1 else RW) in
+(List.fold_left rw_union_two NOTHING rep_list);;
+ 
+let rec report_read_write (param:string) curr_expr' = 
+match curr_expr' with
+| If'(test, dit, dif) -> 
+  let rep_test = (report_read_write param test) in
+  let rep_dit = (report_read_write param dit) in
+  let rep_dif = (report_read_write param dif) in
+  (rw_union [rep_dif; rep_dit; rep_test])
+| Seq'(expr'_list) -> (rw_union (map (report_read_write param) expr'_list))
+| Set'(name_var, value) -> 
+  let this_set = match name_var with | Var'(VarBound(name, mac, min)) -> if (name == param) then W else NOTHING | _ -> NOTHING in
+  (rw_union [this_set; (report_read_write param value)])
+| Or'(expr'_list) -> (rw_union (map (report_read_write param) expr'_list))
+| LambdaSimple'(param_list, body) -> if (List.mem param param_list) then NOTHING else (report_read_write param body)
+| LambdaOpt'(param_list, opt_param, body) -> (if ((opt_param == param) || (List.mem param param_list)) then NOTHING else (report_read_write param body))
+| Applic'(operator, operand_list) -> (rw_union ([(report_read_write param operator)]@ (map (report_read_write param) operand_list)))
+| ApplicTP'(operator, operand_list) -> (rw_union ([(report_read_write param operator)]@ (map (report_read_write param) operand_list)))
+| Var'(VarBound(name, mac, mic)) -> (if (name == param) then R else NOTHING);;
+
+let check_problems list_reports = 
+let reads = (List.filter (fun rep -> rep == R) list_reports) in 
+let writes = (List.filter (fun rep -> rep == W) list_reports) in
+let read_writes = (List.filter (fun rep -> rep == RW) list_reports) in
+if ((List.length read_writes) > 1)
+then true
+else
+  if ((List.length read_writes) == 1)
+  then
+    if (((List.length reads) == 0) && ((List.length writes) == 0))
+    then false
+    else true
+  else
+    if (((List.length reads) > 0) && ((List.length writes) > 0))
+    then true
+    else false
 ;;
+
+
+let rec get_report_list param body_expr' =
+match body_expr' with
+| If'(test, dit, dif) -> 
+  let rep_test = (get_report_list param test) in
+  let rep_dit = (get_report_list param dit) in
+  let rep_dif = (get_report_list param dif) in
+  (rep_dif@ rep_dit@ rep_test)
+| Seq'(expr'_list) -> 
+  let report_lists = (map (get_report_list param) expr'_list) in
+  let complete_list = (List.fold_left (fun a b -> a@ b) [] report_lists) in
+  complete_list
+| Set'(name_var, value) -> 
+  let this_set = match name_var with | Var'(VarBound(name, mac, min)) -> if (name == param) then [W] else [] | _ -> [] in
+  (get_report_list param value)@ this_set
+| Or'(expr'_list) -> 
+  let report_lists = (map (get_report_list param) expr'_list) in
+  let complete_list = (List.fold_left (fun a b -> a@ b) [] report_lists) in
+  complete_list
+| LambdaSimple'(param_list, body) -> if (List.mem param param_list) then [NOTHING] else [(report_read_write param body)]
+| LambdaOpt'(param_list, opt_param, body) -> if ((opt_param == param) || (List.mem param param_list)) then [NOTHING] else [(report_read_write param body)]
+| Applic'(operator, operand_list) -> 
+  let report_lists = (map (get_report_list param) operand_list) in
+  let complete_list = (List.fold_left (fun a b -> a@ b) [] report_lists) in
+  complete_list@ (get_report_list param operator)
+| ApplicTP'(operator, operand_list) -> 
+  let report_lists = (map (get_report_list param) operand_list) in
+  let complete_list = (List.fold_left (fun a b -> a@ b) [] report_lists) in
+  complete_list@ (get_report_list param operator)
+| Var'(VarParam(name, mic)) -> (if (name == param) then [R] else [])
+;;
+
+let should_box param body_expr' = 
+(check_problems (get_report_list param body_expr'))
+              
 
 (*returns new boxes body if needed *)
 let rec box_lambda_simple  param_list body_expr' = 
@@ -200,8 +298,8 @@ match expr' with
                         (* expr'::[] -> Or'([tail_call expr' is_tp])*)
                         | _ -> Or'( List.map (fun expr' -> boxing expr') expr'_list)
                         )
-  | LambdaSimple' (param_list , body_expr') -> LambdaSimple'(param_list , ( box_lambda_simple  param_list body_expr'))
-  | LambdaOpt' (param_list , param_opt , body_expr') -> LambdaOpt' (param_list , param_opt , ( box_lambda_opt  param_list param_opt body_expr'))
+  | LambdaSimple' (param_list , body_expr') -> LambdaSimple'(param_list ,(boxing ( box_lambda_simple  param_list body_expr')) )
+  | LambdaOpt' (param_list , param_opt , body_expr') -> LambdaOpt' (param_list , param_opt ,(boxing ( box_lambda_opt  param_list param_opt body_expr')))
   
   | _ -> raise X_syntax_error
   ;;
@@ -218,4 +316,7 @@ let run_semantics expr =
     (annotate_tail_calls
        (annotate_lexical_addresses expr));;
   
+
+let test string = string;; 
+
 end;; (* struct Semantics *)
