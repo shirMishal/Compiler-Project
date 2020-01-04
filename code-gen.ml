@@ -30,7 +30,7 @@ module type CODE_GEN = sig
 end;;
 
 module Code_Gen : CODE_GEN = struct
-(*code from stackOverflow https://stackoverflow.com/questions/30634119/ocaml-removing-duplicates-from-a-list-while-maintaining-order-from-the-right*)
+(*
 let rem_dup_from_right lst =
   let rec is_member n mlst =
     match mlst with
@@ -53,6 +53,19 @@ let rem_dup_from_right lst =
         end
   in
   loop lst;;
+*)
+
+let rec copy_no_dup list_to_return list_to_copy=
+match list_to_copy with
+| [] -> list_to_return
+| hd :: tl -> if List.mem hd list_to_return then (copy_no_dup list_to_return tl) else (copy_no_dup (list_to_return@[hd]) tl)
+;;
+let rem_dup lst = 
+match lst with
+| []-> []
+| hd::tl -> (match tl with 
+            | []-> lst
+            | car_tl:: cdr_tl -> copy_no_dup [hd] tl);;
 
 
 
@@ -88,43 +101,44 @@ match ast_expr' with
   | _ -> true
   ;;
 
-  let rec make_list_with_sub (Sexpr(s)) = 
-  match s with 
-  | Pair ( hd_sexpr, tl_sexpr) -> [make_list_with_sub tl_sexpr]@ [Sexpr (Pair ( hd_sexpr, tl_sexpr))]
-  | TaggedSexpr (string , sexpr) -> [make_list_with_sub sexpr]@[Sexpr (TaggedSexpr (string , sexpr))]
-  | _ -> [s] 
+  let rec make_list_with_sub sexpr = 
+  match sexpr with 
+  | Sexpr (Pair ( hd_sexpr, tl_sexpr)) -> (make_list_with_sub (Sexpr(tl_sexpr)))@ [Sexpr (Pair ( hd_sexpr, tl_sexpr))]
+  | Sexpr (TaggedSexpr (string , sexpr)) -> (make_list_with_sub (Sexpr (sexpr)))@[Sexpr (TaggedSexpr (string , sexpr))]
+  | Sexpr (s) -> [Sexpr (s)] 
+  | Void -> [] (*this should not happen*)
   ;;
 
-  let add_sub_sexpr sexpr_list = List.flatten (List.map (fun sexpr-> (match sexpr with 
+let add_sub_sexpr sexpr_list = List.flatten (List.map (fun sexpr->  make_list_with_sub sexpr) sexpr_list);;
+  (*let add_sub_sexpr sexpr_list = List.flatten (List.map (fun sexpr-> (match sexpr with 
                                                                       | Sexpr(s) -> make_list_with_sub sexpr
-                                                                      | _ -> raise X_this_should_not_happen)) sexpr_list);;
+                                                                      | _ -> raise X_this_should_not_happen)) sexpr_list);;*)
   
-  let make_sexpr_lists asts = (*returns list of lists contains sexpr for each ast*)
+  let make_sexpr_lists asts = (*returns list contains sexprs for all asts with sub sexpr with no dup with no obligatory*)
   let list_of_sexpr_lists =  List.map make_sexpr_list asts in
   let list_of_all_sexpr = List.flatten list_of_sexpr_lists in
-  let set_of_all_sexpr = rem_dup_from_right list_of_all_sexpr in (*flat list with no dup of all sexpr *)
+  let set_of_all_sexpr = rem_dup list_of_all_sexpr in (*flat list with no dup of all sexpr *)
   let set_of_all_sexpr = List.filter is_not_obligatory set_of_all_sexpr in
   let list_with_sub_sexpr = add_sub_sexpr set_of_all_sexpr in
-  let set_of_all_sexpr = rem_dup_from_right list_with_sub_sexpr in
+  let set_of_all_sexpr = rem_dup list_with_sub_sexpr in
   let set_of_all_sexpr = List.filter is_not_obligatory set_of_all_sexpr in
   set_of_all_sexpr
   ;;
 
+  let make_tuples sexpr_list offset=
+  match sexpr_list with
+  | [] -> []
+  | hd:: tl -> raise X_not_yet_implemented
+  ;;
 
   let add_obligatory lst = 
   let obligatory = [(Void, (0,"SOB_VOID")); (Sexpr Nil, (1,"SOB_NIL")); (Sexpr (Bool false), (2,"SOB_FALSE"));(Sexpr (Bool true), (4,"SOB_TRUE"))] in
-  obligatory@lst;; (*add update to lst offset values *)
+  obligatory@lst;;
 
-  let make_consts_tbl asts = raise X_not_yet_implemented;;
+  let make_list_for_consts_tbl asts = add_obligatory (make_tuples (make_sexpr_lists asts) 6);;
+
+  let make_consts_tbl asts = make_list_for_consts_tbl asts;;
   let make_fvars_tbl asts = raise X_not_yet_implemented;;
   let generate consts fvars e = raise X_not_yet_implemented;;
 end;;
 
-(*| Sexpr (Number(tuple)) -> 
-  | Sexpr (Char (char)) ->
-  | Sexpr (String (string)) ->
-  | Sexpr (Symbol (string)) ->
-  | Sexpr (Pair ( hd_sexpr, tl_sexpr)) ->
-  | Sexpr (TaggedSexpr (string , sexpr)) -> 
-  | Sexpr (TagRef (string)) ->*)
- 
