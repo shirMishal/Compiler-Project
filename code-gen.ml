@@ -122,33 +122,6 @@ match ast_expr' with
                                                                       | Sexpr(s) -> make_list_with_sub sexpr
                                                                       | _ -> raise X_this_should_not_happen)) sexpr_list);;*)
   
-  let rec rename_ref ast_expr' = (*returns ast_expr' after renaming*)
-  raise X_not_yet_implemented
-  (*
-  match ast_expr' with
-  | Const' (Sexpr (TaggedSexpr (string , sexpr))) -> 
-  | Var' (var) ->
-  | Applic' (op_expr' , args_expr'_list) -> 
-  | ApplicTP' (op_expr' , args_expr'_list) -> 
-  | If' (test_expr' , then_expr' , else_expr') -> 
-  | Seq' (expr'_list) -> (match expr'_list with 
-                        | []-> 
-                        | _ -> 
-                        )
-  | Set' (var_expr', val_expr') -> 
-  | Def' (var_expr', val_expr') -> 
-  | Or'(expr'_list) -> (match expr'_list with 
-                        | []-> 
-                        | _ -> 
-                        )
-  | LambdaSimple' (param_list , body_expr') -> 
-  | LambdaOpt' (param_list , param_opt , body_expr') -> 
-  | BoxSet'(var, expr) -> 
-  | BoxGet'(var) -> 
-  | Box'(var) -> 
-  *)
-  ;;
-  
   let rename_refs asts = 
   let taged_list = ref [] in
   let acc_to_index = ref 0 in
@@ -165,6 +138,8 @@ match ast_expr' with
     | _ -> sexpr
   )in
   let rec rename_ref ast =
+  acc_to_index:= !acc_to_index +(List.length !taged_list) ;
+  taged_list:= [] ; 
   (match ast with 
     (*| Const' (Sexpr (TaggedSexpr (string , sexpr))) -> if List.mem string !taged_list then Const' (Sexpr (TaggedSexpr (string^(string_of_int (find string !taged_list)) , (rename_ref_sexpr sexpr)))) else taged_list:= !taged_list@[string] ; counter:= !counter+1 ; Const' (Sexpr (TaggedSexpr (string^(string_of_int !counter) , (rename_ref_sexpr sexpr))))*)
     | Const' (Sexpr (sexpr)) -> Const' (Sexpr (rename_ref_sexpr sexpr)) 
@@ -186,7 +161,7 @@ match ast_expr' with
     | BoxSet'(var, expr) -> BoxSet'(var, (rename_ref expr))
     | _ -> ast
   ) in
-  let mapped_asts = List.map (fun ast -> (acc_to_index:= !acc_to_index +(List.length !taged_list) ;taged_list:= [] ; rename_ref ast)) asts in
+  let mapped_asts = List.map (fun ast -> rename_ref ast) asts in
   mapped_asts;;
 
 
