@@ -61,7 +61,7 @@ let rec find x lst =
     match lst with
     | [] -> raise (X_this_shouldnt_happen_error "from find")
     | h :: t -> if x = h then 0 else 1 + find x t
-
+;;
 let rec copy_no_dup list_to_return list_to_copy=
 match list_to_copy with
 | [] -> list_to_return
@@ -178,17 +178,30 @@ match ast_expr' with
   set_of_all_sexpr
   ;;
 
-  let make_tuples sexpr_list offset=
+  let make_tuples sexpr_list offset const_tbl=
   match sexpr_list with
-  | [] -> []
-  | hd:: tl -> raise X_not_yet_implemented
+  | [] -> const_tbl
+  | hd:: tl -> (match hd with 
+                | Sexpr(Number(Int (integer)))-> make_tuples tl (offset +9) (const_tbl@[(Sexpr(Number(Int (integer))),(offset,"MAKE_LITERAL_INT("^(string_of_int integer)^")" ))])
+                | Sexpr(Number(Float (float)))-> make_tuples tl (offset +9) (const_tbl@[(Sexpr(Float(Int (float))),(offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")" ))])
+                | _-> raise X_this_should_not_happen
+                )
   ;;
-
+(*| Bool of bool
+  | Nil
+  | Number of tuple
+  | Char of char
+  | String of string
+  | Symbol of string
+  | Pair of sexpr * sexpr
+  | TaggedSexpr of string * sexpr
+  | TagRef of string;;
+*)
   let add_obligatory lst = 
-  let obligatory = [(Void, (0,"")); (Sexpr Nil, (1,"")); (Sexpr (Bool false), (2,""));(Sexpr (Bool true), (4,""))] in
+  let obligatory = [(Sexpr Nil, (0,"MAKE_NIL")); (Void, (1,"MAKE_VOID")); (Sexpr (Bool true), (2 ,"MAKE_BOOL(1)")) ; (Sexpr (Bool false), (4 ,"MAKE_BOOL(0)"))] in
   obligatory@lst;;
 
-  let make_list_for_consts_tbl asts = add_obligatory (make_tuples (make_sexpr_lists asts) 6);;
+  let make_list_for_consts_tbl asts = add_obligatory (make_tuples (make_sexpr_lists asts) 6 []);;
 
   let make_consts_tbl asts = make_list_for_consts_tbl asts;;
   let make_fvars_tbl asts = raise X_not_yet_implemented;;
