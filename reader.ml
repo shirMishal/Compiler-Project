@@ -12,7 +12,6 @@ type sexpr =
   | Bool of bool
   | Nil
   | Number of tuple
-
   | Char of char
   | String of string
   | Symbol of string

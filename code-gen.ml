@@ -178,12 +178,21 @@ match ast_expr' with
   set_of_all_sexpr
   ;;
 
-  let make_tuples sexpr_list offset const_tbl=
+let rec find_offset name_str const_tbl =
+match const_tbl with
+| [] -> raise (X_this_shouldnt_happen_error "")
+| _-> 1
+;;
+
+  let rec make_tuples sexpr_list offset const_tbl=
   match sexpr_list with
   | [] -> const_tbl
   | hd:: tl -> (match hd with 
                 | Sexpr(Number(Int (integer)))-> make_tuples tl (offset +9) (const_tbl@[(Sexpr(Number(Int (integer))),(offset,"MAKE_LITERAL_INT("^(string_of_int integer)^")" ))])
-                | Sexpr(Number(Float (float)))-> make_tuples tl (offset +9) (const_tbl@[(Sexpr(Float(Int (float))),(offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")" ))])
+                | Sexpr(Number(Float (float)))-> make_tuples tl (offset +9) (const_tbl@[(Sexpr(Number (Float (float))),(offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")" ))])
+                | Sexpr (Char (char)) -> make_tuples tl (offset +2) (const_tbl@[(Sexpr(Char (char))),(offset,"MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')" ))])
+                | Sexpr (String (string)) -> make_tuples tl (offset+ (String.length string) +9) (const_tbl@[Sexpr (String (string)),(offset,"MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " '" ^ string ^"'" ))])
+                | Sexpr (Symbol (name_str)) -> make_tuples tl (offset +9) (const_tbl@[Sexpr (Symbol (name_str)),(offset,"MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset name_str const_tbl))^")" ))])
                 | _-> raise X_this_should_not_happen
                 )
   ;;
