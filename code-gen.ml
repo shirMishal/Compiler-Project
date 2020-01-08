@@ -224,7 +224,7 @@ match ast_expr' with
 
 let rec find_const_by_name name_to_find list = 
 match list with
-| [] -> raise X_this_should_not_happen
+| [] -> raise (X_this_shouldnt_happen_error "from find const by name")
 | hd::tl -> match hd with
             | (name, const) -> if (name = name_to_find) then const else (find_const_by_name name_to_find tl);;
 
@@ -246,10 +246,10 @@ match sexpr_list with
               | Sexpr(Number(Int (integer)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number(Int (integer))), (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")" ))])
               | Sexpr(Number(Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number (Float (float))), (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")"))])
               | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [((Sexpr(Char (char))), (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')"))])
-              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) const_tbl @ [(Sexpr (String (string)), (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " '" ^ string ^"'" ))]
+              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) const_tbl @ [(Sexpr (String (string)), (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " \"" ^ string ^"\""))]
               | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [(Sexpr (Symbol (name_str)), (offset, "MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")"))])
               | Sexpr(TagRef(tag_name)) -> make_tuples tl (offset + pointer_length) const_tbl @ [(Sexpr (TagRef(tag_name)), (offset, "dq consts + " ^ (string_of_int (find_offset (find_const_by_name tag_name !tagged_expressions) const_tbl))))]
-              | _-> raise X_this_should_not_happen)
+              | _-> raise (X_this_shouldnt_happen_error "from make tuples"))
 ;;
 (*| Bool of bool
   | Nil

@@ -25,6 +25,7 @@
 %define KB(n) n*1024
 %define MB(n) 1024*KB(n)
 %define GB(n) 1024*MB(n)
+
 ;--------------------------------------my added macros----------------------------------------------
 %macro MAKE_LITERAL 2   ; Make a literal of type %1
 						; followed by the definition %2
@@ -47,9 +48,6 @@ db %2
 %endmacro
 
 %define MAKE_LITERAL_SYMBOL(address) MAKE_LITERAL T_SYMBOL, dq address
-
-
-;--------------------------------------till here my added macros------------------------------------
 
 %macro SKIP_TYPE_TAG 2
 	mov %1, qword [%2+TYPE_SIZE]	
@@ -147,10 +145,10 @@ db %2
 ;;; from two pointers %3 and %4
 ;;; Stores result in register %1
 %macro MAKE_TWO_WORDS 4 
-        MALLOC %1, TYPE_SIZE+WORD_BYTES*2
+        MALLOC %1, TYPE_SIZE+WORD_SIZE*2
         mov byte [%1], %2
         mov qword [%1+TYPE_SIZE], %3
-        mov qword [%1+TYPE_SIZE+WORD_BYTES], %4
+        mov qword [%1+TYPE_SIZE+WORD_SIZE], %4
 %endmacro
 
 %macro MAKE_WORDS_LIT 3
