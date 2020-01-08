@@ -77,7 +77,7 @@ match lst with
 
 module SS = Set.Make(String);;
 
-
+let pointer_length = 8;;
 
 let make_free_var_table ast_expr' =
 let offset_counter = ref 0 in
@@ -114,101 +114,161 @@ SS.union current_set_of_names (match ast_expr' with
 
 
 
-let rec make_sexpr_list ast_expr' = (*returns list of all sexprs in const *)
+let rec make_constants_list ast_expr' = (*returns list of all sexprs in const *)
 match ast_expr' with
-  | Const'(constant) -> [constant]
+  | Const'(constant) -> (match constant with
+                        | Void | Sexpr(Bool(_)) | Sexpr(Nil) -> []
+                        | _ -> [constant])
   | Var' (var) -> []
-  | Applic' (op_expr' , args_expr'_list) -> List.flatten ((make_sexpr_list op_expr') :: List.map (fun expr' -> make_sexpr_list expr') args_expr'_list)
-  | ApplicTP' (op_expr' , args_expr'_list) -> List.flatten ((make_sexpr_list op_expr') :: List.map (fun expr' -> make_sexpr_list expr') args_expr'_list)
-  | If' (test_expr' , then_expr' , else_expr') -> List.flatten [(make_sexpr_list test_expr') ;(make_sexpr_list then_expr' ) ;(make_sexpr_list else_expr')]
+  | Applic' (op_expr' , args_expr'_list) -> List.flatten ((make_constants_list op_expr') :: List.map (fun expr' -> make_constants_list expr') args_expr'_list)
+  | ApplicTP' (op_expr' , args_expr'_list) -> List.flatten ((make_constants_list op_expr') :: List.map (fun expr' -> make_constants_list expr') args_expr'_list)
+  | If' (test_expr' , then_expr' , else_expr') -> List.flatten [(make_constants_list test_expr') ;(make_constants_list then_expr' ) ;(make_constants_list else_expr')]
   | Seq' (expr'_list) -> (match expr'_list with 
                         | []-> []
-                        | _ -> List.flatten ( List.map (fun expr' -> make_sexpr_list expr') expr'_list)
+                        | _ -> List.flatten ( List.map (fun expr' -> make_constants_list expr') expr'_list)
                         )
-  | Set' (var_expr', val_expr') -> List.flatten [(make_sexpr_list var_expr'); (make_sexpr_list val_expr')]
-  | Def' (var_expr', val_expr') -> List.flatten [(make_sexpr_list var_expr'); (make_sexpr_list val_expr')]
+  | Set' (var_expr', val_expr') -> List.flatten [(make_constants_list var_expr'); (make_constants_list val_expr')]
+  | Def' (var_expr', val_expr') -> List.flatten [(make_constants_list var_expr'); (make_constants_list val_expr')]
   | Or'(expr'_list) -> (match expr'_list with 
                         | []-> []
-                        | _ -> List.flatten ( List.map (fun expr' -> make_sexpr_list expr') expr'_list)
+                        | _ -> List.flatten ( List.map (fun expr' -> make_constants_list expr') expr'_list)
                         )
-  | LambdaSimple' (param_list , body_expr') -> make_sexpr_list body_expr'
-  | LambdaOpt' (param_list , param_opt , body_expr') -> make_sexpr_list body_expr'
-  | BoxSet'(var, expr) -> make_sexpr_list expr
+  | LambdaSimple' (param_list , body_expr') -> make_constants_list body_expr'
+  | LambdaOpt' (param_list , param_opt , body_expr') -> make_constants_list body_expr'
+  | BoxSet'(var, expr) -> make_constants_list expr
   | BoxGet'(var) -> []
   | Box'(var) -> []
   ;;
   
-  let is_not_obligatory sexpr = 
-  match sexpr with
+  let is_not_obligatory constant = 
+  match constant with
   | Void -> false
   | Sexpr(Bool(_))-> false
   | Sexpr(Nil) -> false
   | _ -> true
   ;;
 
-  let rec make_list_with_sub sexpr = 
-  match sexpr with 
-  | Sexpr (Pair ( hd_sexpr, tl_sexpr)) -> (make_list_with_sub (Sexpr(tl_sexpr)))@ [Sexpr (Pair ( hd_sexpr, tl_sexpr))]
-  | Sexpr (TaggedSexpr (string , sexpr)) -> (make_list_with_sub (Sexpr (sexpr)))@[Sexpr (TaggedSexpr (string , sexpr))]
+  let rec insert_to_list_if_not_exists list element =
+  match list with
+  | [] -> [element]
+  | hd::tl -> 
+
+
+  let tagged_expressions = ref []
+
+  let rec make_list_with_sub constant = 
+  match constant with 
+  | Void | Sexpr(Bool(_)) | Sexpr(Nil) -> []
+  | Sexpr (Pair ( hd_sexpr, tl_sexpr)) -> (make_list_with_sub (Sexpr(tl_sexpr))) @ [Sexpr (Pair ( hd_sexpr, tl_sexpr))]
+  | Sexpr (TaggedSexpr (string, sexpr)) -> tagged_expressions:= (name, Sexpr(sexpr_val)) :: !tagged_expressions ; ; (make_list_with_sub (Sexpr (sexpr))) @ [Sexpr (TaggedSexpr (string , sexpr))]
   | Sexpr (Symbol (sym_name)) -> [Sexpr (String (sym_name))]@[Sexpr (Symbol (sym_name))]
-  | Sexpr (s) -> [Sexpr (s)] 
-  | Void -> [] (*this should not happen*)
+  | Sexpr (s) -> [Sexpr (s)]
   ;;
 
-  let add_sub_sexpr sexpr_list = List.flatten (List.map (fun sexpr->  make_list_with_sub sexpr) sexpr_list);;
-  (*let add_sub_sexpr sexpr_list = List.flatten (List.map (fun sexpr-> (match sexpr with 
-                                                                      | Sexpr(s) -> make_list_with_sub sexpr
+  let add_sub_sexpr sexpr_list = List.flatten (List.map (fun constant->  make_list_with_sub constant) sexpr_list);;
+  (*let add_sub_sexpr sexpr_list = List.flatten (List.map (fun constant-> (match constant with 
+                                                                      | Sexpr(s) -> make_list_with_sub constant
                                                                       | _ -> raise X_this_should_not_happen)) sexpr_list);;*)
   
  
+  let rename_refs asts = 
+  let taged_list = ref [] in
+  let acc_to_index = ref 0 in
+  let counter = ref (-1) in
+  let rec rename_ref_sexpr sexpr =
+  (match sexpr with
+    | Pair (first_sexpr , sec_sexpr) -> Pair ((rename_ref_sexpr first_sexpr) , (rename_ref_sexpr sec_sexpr))
+    | TaggedSexpr (string , sexpr) -> if List.mem string !taged_list 
+                                    then (TaggedSexpr (string^(string_of_int ((find string !taged_list)+ !acc_to_index)) , (rename_ref_sexpr sexpr))) 
+                                    else (taged_list:= !taged_list@[string] ; counter:= !counter+1 ; let tag = !counter in (TaggedSexpr (string^(string_of_int tag) , (rename_ref_sexpr sexpr))))
+    | TagRef (string) -> if List.mem string !taged_list 
+                        then (TagRef(string^(string_of_int ((find string !taged_list)+ !acc_to_index)))) 
+                        else (taged_list:= !taged_list@[string] ; counter:= !counter+1 ; TagRef(string^(string_of_int !counter)))
+    | _ -> sexpr
+  )in
+  let rec rename_ref ast =
+  acc_to_index:= !acc_to_index +(List.length !taged_list) ;
+  taged_list:= [] ; 
+  (match ast with 
+    | Const' (Sexpr (sexpr)) -> Const' (Sexpr (rename_ref_sexpr sexpr)) 
+    | Applic' (op_expr' , args_expr'_list) -> Applic' ((rename_ref op_expr') , (List.map rename_ref args_expr'_list))
+    | ApplicTP' (op_expr' , args_expr'_list) -> ApplicTP' ((rename_ref op_expr') , (List.map rename_ref args_expr'_list))
+    | If' (test_expr' , then_expr' , else_expr') -> If' ((rename_ref test_expr') , (rename_ref then_expr') ,(rename_ref else_expr'))
+    | Seq' (expr'_list) -> (match expr'_list with 
+                          | []-> ast
+                          | _ -> Seq' (List.map rename_ref expr'_list) 
+                          )
+    | Set' (var_expr', val_expr') -> Set' (var_expr', (rename_ref val_expr'))
+    | Def' (var_expr', val_expr') -> Def' (var_expr', (rename_ref val_expr'))
+    | Or'(expr'_list) -> (match expr'_list with 
+                          | []-> ast
+                          | _ -> Or' (List.map rename_ref expr'_list )
+                          )
+    | LambdaSimple' (param_list , body_expr') -> LambdaSimple' (param_list , (rename_ref body_expr'))
+    | LambdaOpt' (param_list , param_opt , body_expr') -> LambdaOpt' (param_list , param_opt , (rename_ref body_expr'))
+    | BoxSet'(var, expr) -> BoxSet'(var, (rename_ref expr))
+    | _ -> ast
+  ) in
+  let mapped_asts = List.map (fun ast -> rename_ref ast) asts in
+  mapped_asts;;
 
 
 
-  let make_sexpr_lists asts = (*returns list contains sexprs for all asts with sub sexpr with no dup with no obligatory*)
-  (*let asts_renamed = rename_refs asts in*)
-  let list_of_sexpr_lists =  List.map make_sexpr_list asts_renamed in
-  let list_of_all_sexpr = List.flatten list_of_sexpr_lists in
-  let set_of_all_sexpr = rem_dup list_of_all_sexpr in (*flat list with no dup of all sexpr *)
-  let set_of_all_sexpr = List.filter is_not_obligatory set_of_all_sexpr in
-  let list_with_sub_sexpr = add_sub_sexpr set_of_all_sexpr in
-  let set_of_all_sexpr = rem_dup list_with_sub_sexpr in
-  let set_of_all_sexpr = List.filter is_not_obligatory set_of_all_sexpr in
-  set_of_all_sexpr
-  ;;
+  let make_constant_lists asts = (*returns list contains sexprs for all asts with sub constant with no dup with no obligatory*)
+  let asts_renamed = rename_refs asts in
+  let list_of_constants_lists =  List.map make_constants_list asts_renamed in
+  let list_of_all_constants = List.flatten list_of_constants_lists in
+  let set_of_all_constants = rem_dup list_of_all_constants in (*flat list with no dup of all constant *)
+  (*let set_of_all_constants = List.filter is_not_obligatory set_of_all_constants*)
+  let list_with_sub_constants = add_sub_sexpr set_of_all_constants in
+  let set_of_all_constants = rem_dup list_with_sub_constants in
+  (**let set_of_all_constants = List.filter is_not_obligatory set_of_all_constants in *)
 
-let rec find_offset name_str const_tbl =
+let rec find_const_by_name name_to_find list = 
+match list with
+| [] -> raise X_this_should_not_happen
+| hd::tl -> match hd with
+            | (name, const) -> if (name = name_to_find) then const else (find_const_by_name name_to_find tl)
+
+let rec find_offset const_to_find const_tbl =
 match const_tbl with
-| [] -> raise (X_this_shouldnt_happen_error "")
-| _-> 1
-;;
+| [] -> raise (X_this_shouldnt_happen_error)
+| hd::tl -> 
+  match hd with
+  | (const, offset, _) -> if (const_to_find = const) 
+                         then offset
+                         else find_offset const_to_find tl;;
 
-  let rec make_tuples sexpr_list offset const_tbl=
-  match sexpr_list with
-  | [] -> const_tbl
-  | hd:: tl -> (match hd with 
-                | Sexpr(Number(Int (integer)))-> make_tuples tl (offset +9) (const_tbl@[(Sexpr(Number(Int (integer))),(offset,"MAKE_LITERAL_INT("^(string_of_int integer)^")" ))])
-                | Sexpr(Number(Float (float)))-> make_tuples tl (offset +9) (const_tbl@[(Sexpr(Number (Float (float))),(offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")" ))])
-                | Sexpr (Char (char)) -> make_tuples tl (offset +2) (const_tbl@[(Sexpr(Char (char))),(offset,"MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')" ))])
-                | Sexpr (String (string)) -> make_tuples tl (offset+ (String.length string) +9) (const_tbl@[Sexpr (String (string)),(offset,"MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " '" ^ string ^"'" ))])
-                | Sexpr (Symbol (name_str)) -> make_tuples tl (offset +9) (const_tbl@[Sexpr (Symbol (name_str)),(offset,"MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset name_str (List.rev const_tbl)))^")" ))])
-                | _-> raise X_this_should_not_happen
-                )
-  ;;
+
+
+let rec make_tuples sexpr_list offset const_tbl =
+match sexpr_list with
+| [] -> const_tbl
+| hd:: tl -> (match hd with 
+              | Sexpr(Number(Int (integer)))-> make_tuples tl (offset + 9) (const_tbl @ [(Sexpr(Number(Int (integer))), (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")") )])
+              | Sexpr(Number(Float (float)))-> make_tuples tl (offset + 9) (const_tbl @ [(Sexpr(Number (Float (float))), (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")") )])
+              | Sexpr (Char (char)) -> make_tuples tl (offset + 2) (const_tbl @ [(Sexpr(Char (char))), (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')") ])
+              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + 9) const_tbl @ [(Sexpr (String (string)), (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " '" ^ string ^"'" ))])
+              | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + 9) (const_tbl @ [(Sexpr (Symbol (name_str)), (offset, "MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset Sexpr(String(name_str)) (List.rev const_tbl)))^")"))])
+              | Sexpr(TagRef(tag_name)) -> make_tuples tl (offset + pointer_length) const_table @ [(Sexpr (TagRef(tag_name)), (offset, "dq consts + " ^ (string_of_int (find_offset (find_const_by_name tag_name tagged_expressions) const_tbl)) ))]
+              | _-> raise X_this_should_not_happen
+              )
+;;
 (*| Bool of bool
   | Nil
   | Number of tuple
   | Char of char
   | String of string
   | Symbol of string
-  | Pair of sexpr * sexpr
-  | TaggedSexpr of string * sexpr
+  | Pair of constant * constant
+  | TaggedSexpr of string * constant
   | TagRef of string;;
 *)
   let add_obligatory lst = 
   let obligatory = [(Sexpr Nil, (0,"MAKE_NIL")); (Void, (1,"MAKE_VOID")); (Sexpr (Bool true), (2 ,"MAKE_BOOL(1)")) ; (Sexpr (Bool false), (4 ,"MAKE_BOOL(0)"))] in
   obligatory@lst;;
 
-  let make_list_for_consts_tbl asts = add_obligatory (make_tuples (make_sexpr_lists asts) 6 []);;
+  let make_list_for_consts_tbl asts = add_obligatory (make_tuples (make_constant_lists asts) 6 []);;
 
   let make_consts_tbl asts = make_list_for_consts_tbl asts;;
   let make_fvars_tbl asts = raise X_not_yet_implemented;;
