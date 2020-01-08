@@ -50,8 +50,7 @@ let rec expr'_eq e1 e2 =
   | _ -> false;;
 	
                        
-exception X_syntax_error of string;;
-exception X_syntax_error_exp of expr';;
+exception X_syntax_error;;
 
 
 
@@ -63,11 +62,11 @@ module type SEMANTICS = sig
 end;;
 module Semantics : SEMANTICS = struct
 
-exception X_this_shouldnt_happen_error of string;;
+exception X_this_shouldnt_happen_error;;
 
 let rec find x lst =
     match lst with
-    | [] -> raise (X_this_shouldnt_happen_error "from find")
+    | [] -> raise (X_this_shouldnt_happen_error)
     | h :: t -> if x = h then 0 else 1 + find x t
 ;;
 let rec tag_bound_or_free var_name bound_lists deep =
@@ -119,7 +118,7 @@ match expr' with
   | LambdaSimple' (param_list , expr') -> LambdaSimple'(param_list , ( tail_call expr' true))
   | LambdaOpt' (param_list , param_opt , expr') -> LambdaOpt' (param_list , param_opt , ( tail_call expr' true))
   
-  | _ -> raise (X_syntax_error "from tail call")
+  | _ -> raise X_syntax_error
   ;;
 
 let merge_get_set list = List.fold_left (fun (curr_get, curr_set) (acc_get, acc_set) -> (curr_get @ acc_get, curr_set @ acc_set)) ([],[]) list;;
@@ -155,7 +154,7 @@ match body_expr' with
       if (List.mem name params_need_boxing)
       then BoxSet'(VarParam(name, mic), (apply_box_body val_expr'))
       else Set'(var_expr', (apply_box_body val_expr'))
-    | _ -> raise (X_this_shouldnt_happen_error "from set var expression in apply boxing body"))
+    | _ -> raise X_this_shouldnt_happen_error)
                                        
   | Or'(expr'_list) -> (match expr'_list with 
                         | []-> Or'(expr'_list)
@@ -168,7 +167,7 @@ match body_expr' with
   | BoxSet'(var, expr) -> BoxSet'(var, expr)
   | BoxGet'(var) -> BoxGet'(var)
   | Box'(var) -> Box'(var)
-  | _ -> raise (X_syntax_error "from apply box body");;
+  | _ -> raise X_syntax_error;;
 
 
 let apply_box params_need_boxing origin_param_list body_expr' = 
@@ -195,15 +194,14 @@ let rw_union rep_list =
           | NOTHING -> W 
           | R  -> RW
           | RW  -> RW
-          | _ -> raise (X_this_shouldnt_happen_error""))
+          | _ -> raise X_this_shouldnt_happen_error)
   | R -> (match rep2 with
           | R  -> R 
           | NOTHING -> R 
           | W  -> RW
           | RW -> RW
-          | _ -> raise (X_this_shouldnt_happen_error""))
-  | _ -> raise (X_this_shouldnt_happen_error""))
-  (*| _ -> if (rep1 = rep2) then rep1 else RW)*) in
+          | _ -> raise X_this_shouldnt_happen_error)
+  | _ -> raise X_this_shouldnt_happen_error) in
 (List.fold_left rw_union_two NOTHING rep_list);;
  
 let rec report_read_write (param:string) curr_expr' = 

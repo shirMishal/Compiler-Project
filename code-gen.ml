@@ -75,6 +75,44 @@ match lst with
             | car_tl:: cdr_tl -> copy_no_dup [hd] tl);;
 
 
+module SS = Set.Make(String);;
+
+
+
+let make_free_var_table ast_expr' =
+let offset_counter = ref 0 in
+let set_of_names = make_free_var_set SS.empty ast_expr' in
+let list_of_names = SS.elements set_of_names in
+  (List.map 
+    (fun name ->
+      let old_count = !offset_counter in
+        offset_counter:= !offset_counter + 8;
+        (name, old_count)) 
+    list_of_names);;
+
+
+
+let rec make_free_var_set current_set_of_names ast_expr' = 
+let make_set_local = (make_free_var_set current_set_of_names) in
+SS.union current_set_of_names (match ast_expr' with
+| Var'(VarFree(var_name)) -> (SS.add var_name current_set_of_names)
+| Applic'(op, arg_list) -> (SS.union (make_set_local op) (List.fold_left SS.union SS.empty (map make_set_local arg_list)))
+| ApplicTP'(op, arg_list) -> (SS.union (make_set_local op) (List.fold_left SS.union SS.empty (map make_set_local arg_list)))
+| If'(test, dit, dif) -> (SS.union (make_set_local test) (SS.union (make_set_local dit) (make_set_local dif)))
+| Seq'(expr'_list) -> (List.fold_left SS.union SS.empty (map make_set_local expr'_list))
+| Set'(Var'(var_expr'), value) -> (SS.union 
+                                    (match var_expr' with
+                                      | VarFree(variable) -> (SS.singleton variable)
+                                      | _ -> SS.empty)
+                                    (make_set_local value))
+| Def'(Var'(VarFree(variable)), value) -> (SS.union (SS.singleton variable) (make_set_local value))
+| Or'(expr'_list) -> (List.fold_left SS.union SS.empty (map make_set_local expr'_list))
+| LambdaSimple'(_, body) -> (make_set_local body)
+| LambdaOpt'(_, _, body) -> (make_set_local body)
+| BoxSet'(_, expr') -> (make_set_local expr')
+| _ -> SS.empty);;
+
+
 
 let rec make_sexpr_list ast_expr' = (*returns list of all sexprs in const *)
 match ast_expr' with
