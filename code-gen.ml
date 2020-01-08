@@ -160,7 +160,47 @@ match ast_expr' with
                                                                       | Sexpr(s) -> make_list_with_sub sexpr
                                                                       | _ -> raise X_this_should_not_happen)) sexpr_list);;*)
   
- 
+  let rename_refs asts = 
+  let taged_list = ref [] in
+  let acc_to_index = ref 0 in
+  let counter = ref (-1) in
+  let rec rename_ref_sexpr sexpr =
+  (match sexpr with
+    | Pair (first_sexpr , sec_sexpr) -> Pair ((rename_ref_sexpr first_sexpr) , (rename_ref_sexpr sec_sexpr))
+    | TaggedSexpr (string , sexpr) -> if List.mem string !taged_list 
+                                    then (TaggedSexpr (string^(string_of_int ((find string !taged_list)+ !acc_to_index)) , (rename_ref_sexpr sexpr))) 
+                                    else (taged_list:= !taged_list@[string] ; counter:= !counter+1 ; let tag = !counter in (TaggedSexpr (string^(string_of_int tag) , (rename_ref_sexpr sexpr))))
+    | TagRef (string) -> if List.mem string !taged_list 
+                        then (TagRef(string^(string_of_int ((find string !taged_list)+ !acc_to_index)))) 
+                        else (taged_list:= !taged_list@[string] ; counter:= !counter+1 ; TagRef(string^(string_of_int !counter)))
+    | _ -> sexpr
+  )in
+  let rec rename_ref ast =
+  acc_to_index:= !acc_to_index +(List.length !taged_list) ;
+  taged_list:= [] ; 
+  (match ast with 
+    (*| Const' (Sexpr (TaggedSexpr (string , sexpr))) -> if List.mem string !taged_list then Const' (Sexpr (TaggedSexpr (string^(string_of_int (find string !taged_list)) , (rename_ref_sexpr sexpr)))) else taged_list:= !taged_list@[string] ; counter:= !counter+1 ; Const' (Sexpr (TaggedSexpr (string^(string_of_int !counter) , (rename_ref_sexpr sexpr))))*)
+    | Const' (Sexpr (sexpr)) -> Const' (Sexpr (rename_ref_sexpr sexpr)) 
+    | Applic' (op_expr' , args_expr'_list) -> Applic' ((rename_ref op_expr') , (List.map rename_ref args_expr'_list))
+    | ApplicTP' (op_expr' , args_expr'_list) -> ApplicTP' ((rename_ref op_expr') , (List.map rename_ref args_expr'_list))
+    | If' (test_expr' , then_expr' , else_expr') -> If' ((rename_ref test_expr') , (rename_ref then_expr') ,(rename_ref else_expr'))
+    | Seq' (expr'_list) -> (match expr'_list with 
+                          | []-> ast
+                          | _ -> Seq' (List.map rename_ref expr'_list) 
+                          )
+    | Set' (var_expr', val_expr') -> Set' (var_expr', (rename_ref val_expr'))
+    | Def' (var_expr', val_expr') -> Def' (var_expr', (rename_ref val_expr'))
+    | Or'(expr'_list) -> (match expr'_list with 
+                          | []-> ast
+                          | _ -> Or' (List.map rename_ref expr'_list )
+                          )
+    | LambdaSimple' (param_list , body_expr') -> LambdaSimple' (param_list , (rename_ref body_expr'))
+    | LambdaOpt' (param_list , param_opt , body_expr') -> LambdaOpt' (param_list , param_opt , (rename_ref body_expr'))
+    | BoxSet'(var, expr) -> BoxSet'(var, (rename_ref expr))
+    | _ -> ast
+  ) in
+  let mapped_asts = List.map (fun ast -> rename_ref ast) asts in
+  mapped_asts;;
 
 
 
@@ -176,10 +216,10 @@ match ast_expr' with
   set_of_all_sexpr
   ;;
 
-let rec find_offset name_str const_tbl =
+let rec find_offset_symbol name_str const_tbl =
 match const_tbl with
 | [] -> raise (X_this_shouldnt_happen_error "")
-| _-> 1
+| hd::-> 1
 ;;
 
   let rec make_tuples sexpr_list offset const_tbl=
@@ -190,7 +230,7 @@ match const_tbl with
                 | Sexpr(Number(Float (float)))-> make_tuples tl (offset +9) (const_tbl@[(Sexpr(Number (Float (float))),(offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")" ))])
                 | Sexpr (Char (char)) -> make_tuples tl (offset +2) (const_tbl@[(Sexpr(Char (char))),(offset,"MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')" ))])
                 | Sexpr (String (string)) -> make_tuples tl (offset+ (String.length string) +9) (const_tbl@[Sexpr (String (string)),(offset,"MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " '" ^ string ^"'" ))])
-                | Sexpr (Symbol (name_str)) -> make_tuples tl (offset +9) (const_tbl@[Sexpr (Symbol (name_str)),(offset,"MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset name_str (List.rev const_tbl)))^")" ))])
+                | Sexpr (Symbol (name_str)) -> make_tuples tl (offset +9) (const_tbl@[Sexpr (Symbol (name_str)),(offset,"MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset (Sexpr (String (name_str))) (List.rev const_tbl)))^")" ))])
                 | _-> raise X_this_should_not_happen
                 )
   ;;
