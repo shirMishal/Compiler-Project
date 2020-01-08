@@ -78,18 +78,10 @@ match lst with
 module SS = Set.Make(String);;
 
 let pointer_length = 8;;
-
-let make_free_var_table ast_expr' =
-let offset_counter = ref 0 in
-let set_of_names = make_free_var_set SS.empty ast_expr' in
-let list_of_names = SS.elements set_of_names in
-  (List.map 
-    (fun name ->
-      let old_count = !offset_counter in
-        offset_counter:= !offset_counter + 8;
-        (name, old_count)) 
-    list_of_names);;
-
+let number_object_length = 9;;
+let symbol_object_length = 9;;
+let string_object_length = 9;;
+let char_object_length = 2;;
 
 
 let rec make_free_var_set current_set_of_names ast_expr' = 
@@ -112,6 +104,17 @@ SS.union current_set_of_names (match ast_expr' with
 | BoxSet'(_, expr') -> (make_set_local expr')
 | _ -> SS.empty);;
 
+let make_free_var_table asts =
+let offset_counter = ref 0 in
+let list_of_set_of_names = (map (make_free_var_set SS.empty) asts) in
+let set_of_names = (List.fold_left SS.union SS.empty list_of_set_of_names) in
+let list_of_names = SS.elements set_of_names in
+  (List.map 
+    (fun name ->
+      let old_count = !offset_counter in
+        offset_counter:= !offset_counter + 8;
+        (name, old_count)) 
+    list_of_names);;
 
 
 let rec make_constants_list ast_expr' = (*returns list of all sexprs in const *)
@@ -148,19 +151,13 @@ match ast_expr' with
   | _ -> true
   ;;
 
-  let rec insert_to_list_if_not_exists list element =
-  match list with
-  | [] -> [element]
-  | hd::tl -> 
-
-
-  let tagged_expressions = ref []
+  let tagged_expressions = ref [];;
 
   let rec make_list_with_sub constant = 
   match constant with 
   | Void | Sexpr(Bool(_)) | Sexpr(Nil) -> []
-  | Sexpr (Pair ( hd_sexpr, tl_sexpr)) -> (make_list_with_sub (Sexpr(tl_sexpr))) @ [Sexpr (Pair ( hd_sexpr, tl_sexpr))]
-  | Sexpr (TaggedSexpr (string, sexpr)) -> tagged_expressions:= (name, Sexpr(sexpr_val)) :: !tagged_expressions ; ; (make_list_with_sub (Sexpr (sexpr))) @ [Sexpr (TaggedSexpr (string , sexpr))]
+  | Sexpr (Pair (hd_sexpr, tl_sexpr)) -> (make_list_with_sub (Sexpr(tl_sexpr))) @ [Sexpr(hd_sexpr); Sexpr (Pair(hd_sexpr, tl_sexpr))]
+  | Sexpr (TaggedSexpr (string, sexpr_val)) -> tagged_expressions:= (string, Sexpr(sexpr_val)) :: !tagged_expressions ; (make_list_with_sub (Sexpr (sexpr_val))) @ [(Sexpr (sexpr_val))]
   | Sexpr (Symbol (sym_name)) -> [Sexpr (String (sym_name))]@[Sexpr (Symbol (sym_name))]
   | Sexpr (s) -> [Sexpr (s)]
   ;;
@@ -222,37 +219,37 @@ match ast_expr' with
   (*let set_of_all_constants = List.filter is_not_obligatory set_of_all_constants*)
   let list_with_sub_constants = add_sub_sexpr set_of_all_constants in
   let set_of_all_constants = rem_dup list_with_sub_constants in
+  set_of_all_constants;;
   (**let set_of_all_constants = List.filter is_not_obligatory set_of_all_constants in *)
 
 let rec find_const_by_name name_to_find list = 
 match list with
 | [] -> raise X_this_should_not_happen
 | hd::tl -> match hd with
-            | (name, const) -> if (name = name_to_find) then const else (find_const_by_name name_to_find tl)
+            | (name, const) -> if (name = name_to_find) then const else (find_const_by_name name_to_find tl);;
 
 let rec find_offset const_to_find const_tbl =
 match const_tbl with
-| [] -> raise (X_this_shouldnt_happen_error)
+| [] -> raise (X_this_shouldnt_happen_error "")
 | hd::tl -> 
   match hd with
-  | (const, offset, _) -> if (const_to_find = const) 
+  | (const, (offset, _)) -> if (const_to_find = const) 
                          then offset
                          else find_offset const_to_find tl;;
 
 
 
-let rec make_tuples sexpr_list offset const_tbl =
+let rec make_tuples (sexpr_list: constant list) (offset : int) (const_tbl : (constant* (int * string)) list) : (constant* (int * string)) list =
 match sexpr_list with
 | [] -> const_tbl
 | hd:: tl -> (match hd with 
-              | Sexpr(Number(Int (integer)))-> make_tuples tl (offset + 9) (const_tbl @ [(Sexpr(Number(Int (integer))), (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")") )])
-              | Sexpr(Number(Float (float)))-> make_tuples tl (offset + 9) (const_tbl @ [(Sexpr(Number (Float (float))), (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")") )])
-              | Sexpr (Char (char)) -> make_tuples tl (offset + 2) (const_tbl @ [(Sexpr(Char (char))), (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')") ])
-              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + 9) const_tbl @ [(Sexpr (String (string)), (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " '" ^ string ^"'" ))])
-              | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + 9) (const_tbl @ [(Sexpr (Symbol (name_str)), (offset, "MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset Sexpr(String(name_str)) (List.rev const_tbl)))^")"))])
-              | Sexpr(TagRef(tag_name)) -> make_tuples tl (offset + pointer_length) const_table @ [(Sexpr (TagRef(tag_name)), (offset, "dq consts + " ^ (string_of_int (find_offset (find_const_by_name tag_name tagged_expressions) const_tbl)) ))]
-              | _-> raise X_this_should_not_happen
-              )
+              | Sexpr(Number(Int (integer)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number(Int (integer))), (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")" ))])
+              | Sexpr(Number(Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number (Float (float))), (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")"))])
+              | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [((Sexpr(Char (char))), (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')"))])
+              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) const_tbl @ [(Sexpr (String (string)), (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " '" ^ string ^"'" ))]
+              | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [(Sexpr (Symbol (name_str)), (offset, "MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")"))])
+              | Sexpr(TagRef(tag_name)) -> make_tuples tl (offset + pointer_length) const_tbl @ [(Sexpr (TagRef(tag_name)), (offset, "dq consts + " ^ (string_of_int (find_offset (find_const_by_name tag_name !tagged_expressions) const_tbl))))]
+              | _-> raise X_this_should_not_happen)
 ;;
 (*| Bool of bool
   | Nil
@@ -271,7 +268,7 @@ match sexpr_list with
   let make_list_for_consts_tbl asts = add_obligatory (make_tuples (make_constant_lists asts) 6 []);;
 
   let make_consts_tbl asts = make_list_for_consts_tbl asts;;
-  let make_fvars_tbl asts = raise X_not_yet_implemented;;
+  let make_fvars_tbl asts = make_free_var_table asts;;
   let generate consts fvars e = raise X_not_yet_implemented;;
 end;;
 
