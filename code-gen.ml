@@ -13,7 +13,7 @@ module type CODE_GEN = sig
          of the constant value
      For example: [(Sexpr(Nil), (1, "SOB_NIL"))]
    *)
-
+val make_constant_lists : expr' list -> constant
   val make_consts_tbl : expr' list -> (constant * (int * string)) list
 
   (* This signature assumes the structure of the fvars table is
@@ -243,12 +243,13 @@ let rec make_tuples (sexpr_list: constant list) (offset : int) (const_tbl : (con
 match sexpr_list with
 | [] -> const_tbl
 | hd:: tl -> (match hd with 
-              | Sexpr(Number(Int (integer)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number(Int (integer))), (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")" ))])
-              | Sexpr(Number(Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number (Float (float))), (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")"))])
+              | Sexpr (Number (Int (integer)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number(Int (integer))), (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")" ))])
+              | Sexpr (Number (Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number (Float (float))), (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")"))])
               | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [((Sexpr(Char (char))), (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')"))])
               | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) const_tbl @ [(Sexpr (String (string)), (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " \"" ^ string ^"\""))]
               | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [(Sexpr (Symbol (name_str)), (offset, "MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")"))])
-              | Sexpr(TagRef(tag_name)) -> make_tuples tl (offset + pointer_length) const_tbl @ [(Sexpr (TagRef(tag_name)), (offset, "dq consts + " ^ (string_of_int (find_offset (find_const_by_name tag_name !tagged_expressions) const_tbl))))]
+              
+              | Sexpr (TagRef (tag_name)) -> make_tuples tl (offset + pointer_length) const_tbl @ [(Sexpr (TagRef(tag_name)), (offset, "dq consts + " ^ (string_of_int (find_offset (find_const_by_name tag_name !tagged_expressions) const_tbl))))]
               | _-> raise (X_this_shouldnt_happen_error "from make tuples"))
 ;;
 (*| Bool of bool
