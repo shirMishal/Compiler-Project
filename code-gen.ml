@@ -13,7 +13,7 @@ module type CODE_GEN = sig
          of the constant value
      For example: [(Sexpr(Nil), (1, "SOB_NIL"))]
    *)
-val make_constant_lists : expr' list -> constant
+(*val make_constant_lists : expr' list -> constant*)
   val make_consts_tbl : expr' list -> (constant * (int * string)) list
 
   (* This signature assumes the structure of the fvars table is
@@ -56,6 +56,7 @@ let rem_dup_from_right lst =
   loop lst;;
 *)
 exception X_this_shouldnt_happen_error of string;;
+exception X_print_sexpr of sexpr
 
 let rec find x lst =
     match lst with
@@ -83,6 +84,15 @@ let symbol_object_length = 9;;
 let string_object_length = 9;;
 let char_object_length = 2;;
 
+let primitive_vars = 
+  [("boolean?", 0); ("float?", 1); ("integer?", 2); ("pair?", 3);
+   ("null?", 4); ("char?", 5); ("string?", 6);
+   ("procedure?", 7); ("symbol?", 8); ("string-length", 9);
+   ("string-ref", 10); ("string-set!", 11); ("make-string", 12);
+   ("symbol->string", 13); 
+   ("char->integer", 14); ("integer->char", 15); ("eq?", 16);
+   ("+", 17); ("*", 18);( "-", 19); ("/", 20); ("<", 21); ("=", 22)
+(* you can add yours here *)];;
 
 let rec make_free_var_set current_set_of_names ast_expr' = 
 let make_set_local = (make_free_var_set current_set_of_names) in
@@ -105,7 +115,7 @@ SS.union current_set_of_names (match ast_expr' with
 | _ -> SS.empty);;
 
 let make_free_var_table asts =
-let offset_counter = ref 0 in
+let offset_counter = ref 23 in
 let list_of_set_of_names = (map (make_free_var_set SS.empty) asts) in
 let set_of_names = (List.fold_left SS.union SS.empty list_of_set_of_names) in
 let list_of_names = SS.elements set_of_names in
@@ -116,11 +126,13 @@ let list_of_names = SS.elements set_of_names in
         (name, old_count)) 
     list_of_names);;
 
+let tagged_expressions = ref [];;
 
 let rec make_constants_list ast_expr' = (*returns list of all sexprs in const *)
 match ast_expr' with
   | Const'(constant) -> (match constant with
                         | Void | Sexpr(Bool(_)) | Sexpr(Nil) -> []
+                        | Sexpr(TaggedSexpr(name, value)) -> tagged_expressions:= (name, Sexpr(value)) :: !tagged_expressions ; [constant]
                         | _ -> [constant])
   | Var' (var) -> []
   | Applic' (op_expr' , args_expr'_list) -> List.flatten ((make_constants_list op_expr') :: List.map (fun expr' -> make_constants_list expr') args_expr'_list)
@@ -134,7 +146,7 @@ match ast_expr' with
   | Def' (var_expr', val_expr') -> List.flatten [(make_constants_list var_expr'); (make_constants_list val_expr')]
   | Or'(expr'_list) -> (match expr'_list with 
                         | []-> []
-                        | _ -> List.flatten ( List.map (fun expr' -> make_constants_list expr') expr'_list)
+                        | _ -> List.flatten (List.map (fun expr' -> make_constants_list expr') expr'_list)
                         )
   | LambdaSimple' (param_list , body_expr') -> make_constants_list body_expr'
   | LambdaOpt' (param_list , param_opt , body_expr') -> make_constants_list body_expr'
@@ -151,18 +163,22 @@ match ast_expr' with
   | _ -> true
   ;;
 
-  let tagged_expressions = ref [];;
 
+  (* takes a constant <constant> and returnts a list of all constants which are sub-constant or equals to it *)
   let rec make_list_with_sub constant = 
   match constant with 
   | Void | Sexpr(Bool(_)) | Sexpr(Nil) -> []
-  | Sexpr (Pair (hd_sexpr, tl_sexpr)) -> (make_list_with_sub (Sexpr(tl_sexpr))) @ [Sexpr(hd_sexpr); Sexpr (Pair(hd_sexpr, tl_sexpr))]
-  | Sexpr (TaggedSexpr (string, sexpr_val)) -> tagged_expressions:= (string, Sexpr(sexpr_val)) :: !tagged_expressions ; (make_list_with_sub (Sexpr (sexpr_val))) @ [(Sexpr (sexpr_val))]
+  | Sexpr (Pair (hd_sexpr, tl_sexpr)) -> let car = (make_list_with_sub (Sexpr(hd_sexpr))) in
+                                         let cdr = (make_list_with_sub (Sexpr(tl_sexpr))) in
+                                         let all_pair =  (  [Sexpr (Pair(hd_sexpr, tl_sexpr))]) in
+                                         car @ (cdr @ all_pair)
+  | Sexpr (TaggedSexpr (string, sexpr_val)) -> tagged_expressions:= (string, Sexpr(sexpr_val)) :: !tagged_expressions ; (make_list_with_sub (Sexpr (sexpr_val))) @ [constant]
   | Sexpr (Symbol (sym_name)) -> [Sexpr (String (sym_name))]@[Sexpr (Symbol (sym_name))]
-  | Sexpr (s) -> [Sexpr (s)]
+  | Sexpr (TagRef(name)) ->  [constant]
+  | Sexpr (s) -> [constant]
   ;;
 
-  let add_sub_sexpr sexpr_list = List.flatten (List.map (fun constant->  make_list_with_sub constant) sexpr_list);;
+  let add_sub_sexpr sexpr_list = List.flatten (List.map (fun constant ->  make_list_with_sub constant) sexpr_list);;
   (*let add_sub_sexpr sexpr_list = List.flatten (List.map (fun constant-> (match constant with 
                                                                       | Sexpr(s) -> make_list_with_sub constant
                                                                       | _ -> raise X_this_should_not_happen)) sexpr_list);;*)
@@ -210,17 +226,14 @@ match ast_expr' with
   mapped_asts;;
 
 
-
   let make_constant_lists asts = (*returns list contains sexprs for all asts with sub constant with no dup with no obligatory*)
   let asts_renamed = rename_refs asts in
   let list_of_constants_lists =  List.map make_constants_list asts_renamed in
   let list_of_all_constants = List.flatten list_of_constants_lists in
   let set_of_all_constants = rem_dup list_of_all_constants in (*flat list with no dup of all constant *)
-  (*let set_of_all_constants = List.filter is_not_obligatory set_of_all_constants*)
-  let list_with_sub_constants = add_sub_sexpr set_of_all_constants in
-  let set_of_all_constants = rem_dup list_with_sub_constants in
-  set_of_all_constants;;
-  (**let set_of_all_constants = List.filter is_not_obligatory set_of_all_constants in *)
+  let set_of_all_constants = add_sub_sexpr set_of_all_constants in
+  rem_dup set_of_all_constants;;
+
 
 let rec find_const_by_name name_to_find list = 
 match list with
@@ -228,14 +241,15 @@ match list with
 | hd::tl -> match hd with
             | (name, const) -> if (name = name_to_find) then const else (find_const_by_name name_to_find tl);;
 
-let rec find_offset const_to_find const_tbl =
+let rec find_offset (const_to_find:constant) const_tbl =
+let const_to_find = (match const_to_find with 
+                    | Sexpr(TaggedSexpr(name, value)) -> Sexpr(value) 
+                    | _ -> const_to_find) in
 match const_tbl with
-| [] -> raise (X_this_shouldnt_happen_error "")
+| [] -> 222222222222222
 | hd::tl -> 
   match hd with
-  | (const, (offset, _)) -> if (const_to_find = const) 
-                         then offset
-                         else find_offset const_to_find tl;;
+  | (const, (offset, _)) -> if const = const_to_find then offset else find_offset const_to_find tl;;
 
 
 
@@ -243,14 +257,15 @@ let rec make_tuples (sexpr_list: constant list) (offset : int) (const_tbl : (con
 match sexpr_list with
 | [] -> const_tbl
 | hd:: tl -> (match hd with 
-              | Sexpr (Number (Int (integer)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number(Int (integer))), (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")" ))])
-              | Sexpr (Number (Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [(Sexpr(Number (Float (float))), (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")"))])
-              | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [((Sexpr(Char (char))), (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')"))])
-              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) const_tbl @ [(Sexpr (String (string)), (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " \"" ^ string ^"\""))]
-              | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [(Sexpr (Symbol (name_str)), (offset, "MAKE_LITERAL_SYMBOL(consts+"^(string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")"))])
-              
-              | Sexpr (TagRef (tag_name)) -> make_tuples tl (offset + pointer_length) const_tbl @ [(Sexpr (TagRef(tag_name)), (offset, "dq consts + " ^ (string_of_int (find_offset (find_const_by_name tag_name !tagged_expressions) const_tbl))))]
-              | _-> raise (X_this_shouldnt_happen_error "from make tuples"))
+              | Sexpr(Number(Int (integer)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")" )])
+              | Sexpr(Number(Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [hd, (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")")])
+              | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')")])
+              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " \"" ^ string ^"\""))])
+              | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_SYMBOL(consts+" ^ (string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")")])
+              | Sexpr(TagRef(tag_name)) -> make_tuples tl (offset + pointer_length) (const_tbl @ [(hd, (offset, "tag ref"))])
+              | Sexpr(Pair(car, cdr)) -> make_tuples tl (offset + pointer_length * 2) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_PAIR(" ^ (string_of_int (find_offset (Sexpr(car)) const_tbl)) ^ ", " ^ (string_of_int (find_offset (Sexpr(cdr)) const_tbl) ^ ")")))])
+              | Sexpr(TaggedSexpr(name, value)) -> make_tuples tl offset const_tbl 
+              | _ -> raise (X_this_shouldnt_happen_error "from tuple"))
 ;;
 (*| Bool of bool
   | Nil
@@ -266,10 +281,17 @@ match sexpr_list with
   let obligatory = [(Sexpr Nil, (0,"MAKE_NIL")); (Void, (1,"MAKE_VOID")); (Sexpr (Bool true), (2 ,"MAKE_BOOL(1)")) ; (Sexpr (Bool false), (4 ,"MAKE_BOOL(0)"))] in
   obligatory@lst;;
 
-  let make_list_for_consts_tbl asts = add_obligatory (make_tuples (make_constant_lists asts) 6 []);;
+  let make_list_for_consts_tbl asts = 
+  let constant_table = (make_tuples (make_constant_lists asts) 6 (add_obligatory [])) in
+  let resolved_constant_table = (List.map (
+    fun constant ->
+    match constant with
+    | (Sexpr(TagRef(name)), (offset, _)) -> (Sexpr(TagRef(name)), (offset, "consts + " ^ (string_of_int (find_offset (find_const_by_name name !tagged_expressions) constant_table))))
+    | _ -> constant
+  ) constant_table) in resolved_constant_table;;
 
   let make_consts_tbl asts = make_list_for_consts_tbl asts;;
-  let make_fvars_tbl asts = make_free_var_table asts;;
+  let make_fvars_tbl asts = primitive_vars@ (make_free_var_table asts);;
   let generate consts fvars e = raise X_not_yet_implemented;;
 end;;
 
