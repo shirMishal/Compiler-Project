@@ -290,8 +290,14 @@ match sexpr_list with
     | _ -> constant
   ) constant_table) in resolved_constant_table;;
 
+
   let make_consts_tbl asts = make_list_for_consts_tbl asts;;
   let make_fvars_tbl asts = primitive_vars@ (make_free_var_table asts);;
-  let generate consts fvars e = raise X_not_yet_implemented;;
+  let generate consts fvars e = 
+  match e with
+  | Const'(constant) -> (Printf.sprintf "lea rax, [consts + %d]" (find_offset constant consts)) (* foramtted string *)
+  | _ -> raise X_not_yet_implemented
+    
+  ;;
 end;;
 
