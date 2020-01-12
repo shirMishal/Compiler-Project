@@ -261,7 +261,7 @@ match sexpr_list with
               | Sexpr(Number(Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [hd, (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")")])
               | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')")])
               | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " \"" ^ string ^"\""))])
-              | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_SYMBOL(consts+" ^ (string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")")])
+              | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_SYMBOL(const_tbl+" ^ (string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")")])
               | Sexpr(TagRef(tag_name)) -> make_tuples tl (offset + pointer_length) (const_tbl @ [(hd, (offset, "tag ref"))])
               | Sexpr(Pair(car, cdr)) -> make_tuples tl (offset + pointer_length * 2) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_PAIR(" ^ (string_of_int (find_offset (Sexpr(car)) const_tbl)) ^ ", " ^ (string_of_int (find_offset (Sexpr(cdr)) const_tbl) ^ ")")))])
               | Sexpr(TaggedSexpr(name, value)) -> make_tuples tl offset const_tbl 
@@ -286,7 +286,7 @@ match sexpr_list with
   let resolved_constant_table = (List.map (
     fun constant ->
     match constant with
-    | (Sexpr(TagRef(name)), (offset, _)) -> (Sexpr(TagRef(name)), (offset, "consts + " ^ (string_of_int (find_offset (find_const_by_name name !tagged_expressions) constant_table))))
+    | (Sexpr(TagRef(name)), (offset, _)) -> (Sexpr(TagRef(name)), (offset, "const_tbl + " ^ (string_of_int (find_offset (find_const_by_name name !tagged_expressions) constant_table))))
     | _ -> constant
   ) constant_table) in resolved_constant_table;;
 
@@ -295,7 +295,7 @@ match sexpr_list with
   let make_fvars_tbl asts = primitive_vars@ (make_free_var_table asts);;
   let generate consts fvars e = 
   match e with
-  | Const'(constant) -> (Printf.sprintf "lea rax, [consts + %d]" (find_offset constant consts)) (* foramtted string *)
+  | Const'(constant) -> (Printf.sprintf "lea rax, [const_tbl + %d]" (find_offset constant consts)) (* foramtted string *)
   | _ -> raise X_not_yet_implemented
     
   ;;
