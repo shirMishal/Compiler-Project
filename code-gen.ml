@@ -260,10 +260,10 @@ match sexpr_list with
               | Sexpr(Number(Int (integer)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")" )])
               | Sexpr(Number(Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [hd, (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")")])
               | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')")])
-              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ " \"" ^ string ^"\""))])
+              | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ ", \"" ^ string ^"\""))])
               | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_SYMBOL(const_tbl+" ^ (string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")")])
               | Sexpr(TagRef(tag_name)) -> make_tuples tl (offset + pointer_length) (const_tbl @ [(hd, (offset, "tag ref"))])
-              | Sexpr(Pair(car, cdr)) -> make_tuples tl (offset + pointer_length * 2) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_PAIR(" ^ (string_of_int (find_offset (Sexpr(car)) const_tbl)) ^ ", " ^ (string_of_int (find_offset (Sexpr(cdr)) const_tbl) ^ ")")))])
+              | Sexpr(Pair(car, cdr)) -> make_tuples tl (offset + (pointer_length * 2)+1) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_PAIR( const_tbl +" ^ (string_of_int (find_offset (Sexpr(car)) const_tbl)) ^ " , const_tbl +" ^ (string_of_int (find_offset (Sexpr(cdr)) const_tbl) ^ ")")))])
               | Sexpr(TaggedSexpr(name, value)) -> make_tuples tl offset const_tbl 
               | _ -> raise (X_this_shouldnt_happen_error "from tuple"))
 ;;
@@ -295,7 +295,10 @@ match sexpr_list with
   let make_fvars_tbl asts = primitive_vars@ (make_free_var_table asts);;
   let generate consts fvars e = 
   match e with
+  (*| Const'(Sexpr(Pair (car, cdr))) -> (Printf.sprintf "mov rax, (const_tbl+ %d)" (find_offset (Sexpr(Pair (car, cdr))) consts)) (* foramtted string *)
   | Const'(constant) -> (Printf.sprintf "lea rax, [const_tbl + %d]" (find_offset constant consts)) (* foramtted string *)
+  *)
+  | Const'(constant) -> (Printf.sprintf "mov rax, (const_tbl+ %d)" (find_offset constant consts))
   | _ -> raise X_not_yet_implemented
     
   ;;
