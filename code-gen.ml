@@ -253,6 +253,16 @@ match const_tbl with
   match hd with
   | (const, (offset, _)) -> if const = const_to_find then offset else find_offset const_to_find tl;;
 
+let replace_tagref const_tbl =
+let update_tagref tuple = 
+(match tuple with 
+  | (Sexpr (Pair (TagRef (name1), TagRef (name2))) , (offset, asm_string )) -> (Sexpr (Pair (TagRef (name1), TagRef (name2))) , (offset, "MAKE_LITERAL_PAIR( const_tbl +" ^ (string_of_int (find_offset (find_const_by_name name1 !tagged_expressions) const_tbl)) ^ " , const_tbl +" ^ (string_of_int (find_offset (find_const_by_name name2 !tagged_expressions) const_tbl)) ^ ")" )) 
+  | (Sexpr (Pair (TagRef (name1), other)) , (offset, asm_string )) -> (Sexpr (Pair (TagRef (name1),other)) , (offset,"MAKE_LITERAL_PAIR( const_tbl +" ^ (string_of_int (find_offset (find_const_by_name name1 !tagged_expressions) const_tbl)) ^ " , const_tbl +" ^ (string_of_int (find_offset (Sexpr(other)) const_tbl)) ^ ")"  ))
+  | (Sexpr (Pair (other, TagRef (name2))) , (offset, asm_string )) -> (Sexpr (Pair (other, TagRef (name2))) , (offset, "MAKE_LITERAL_PAIR( const_tbl +" ^ (string_of_int (find_offset (Sexpr(other)) const_tbl)) ^ " , const_tbl +" ^ (string_of_int (find_offset (find_const_by_name name2 !tagged_expressions) const_tbl)) ^ ")" ))
+  | _ -> tuple) in
+List.map update_tagref const_tbl;;
+
+
 
 
 let rec make_tuples (sexpr_list: constant list) (offset : int) (const_tbl : (constant* (int * string)) list) : (constant* (int * string)) list =
@@ -284,7 +294,7 @@ match sexpr_list with
   obligatory@lst;;
 
   let make_list_for_consts_tbl asts =
-  (make_tuples (make_constant_lists asts) 6 (add_obligatory []));;
+  (replace_tagref (make_tuples (make_constant_lists asts) 6 (add_obligatory [])));;
 
 
   let make_consts_tbl asts = make_list_for_consts_tbl asts;;
