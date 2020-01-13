@@ -124,7 +124,7 @@ let list_of_names = SS.elements set_of_names in
   (List.map 
     (fun name ->
       let old_count = !offset_counter in
-        offset_counter:= !offset_counter ;
+        offset_counter:= !offset_counter +1;
         (name, old_count)) 
     list_of_names);;
 
@@ -305,19 +305,43 @@ match fvars with
 
   let make_list_for_consts_tbl asts =
   (replace_tagref (make_tuples (make_constant_lists asts) 6 (add_obligatory [])));;
-
-
-  let make_consts_tbl asts = make_list_for_consts_tbl asts;;
-  let make_fvars_tbl asts = primitive_vars@ (make_free_var_table asts);;
-  let generate consts fvars e = 
+(*
+  let rec generate_asm consts fvars e = 
   match e with
   (*| Const'(Sexpr(Pair (car, cdr))) -> (Printf.sprintf "mov rax, (const_tbl+ %d)" (find_offset (Sexpr(Pair (car, cdr))) consts)) (* foramtted string *)
   | Const'(constant) -> (Printf.sprintf "lea rax, [const_tbl + %d]" (find_offset constant consts)) (* foramtted string *)
   *)
   | Const'(constant) -> (Printf.sprintf "lea rax, [const_tbl+ %d]" (find_offset constant consts))
   | Var'(VarFree (v)) -> (Printf.sprintf "mov rax, qword [fvar_tbl + %d * WORD_SIZE]" (find_offset_fvars v fvars))
-  | _ -> raise X_not_yet_implemented
-    
+  | Def' (Var'(VarFree (v)) , expr') -> (generate_asm consts fvars expr');
+                                        (Printf.sprintf "\n mov [fvar_tbl + %d * WORD_SIZE], rax" (find_offset_fvars v fvars)) 
+  | _ -> raise X_not_yet_implemented 
   ;;
+*)
+  let rec add_to_or generated_list list_to_return =
+  match generated_list with
+  | []-> list_to_return
+  | hd::tl -> (match tl with
+                | [] -> (add_to_or tl (list_to_return@[hd^"\n Lexit: "]))
+                | _ -> (add_to_or tl (list_to_return@[hd^"\n cmp rax, SOB_FALSE_ADDRESS \n jne Lexit\n"]))
+                );;
+
+  let rec generate_asm consts fvars e = 
+  match e with
+  | Const'(constant) -> "lea rax, [const_tbl+ "^(string_of_int (find_offset constant consts)) ^"]" 
+  | Var'(VarFree (v)) -> "mov rax, qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE]" 
+  | Def' (Var'(VarFree (v)) , expr') -> (generate_asm consts fvars expr')^"\n mov [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n lea rax, [const_tbl+1] \n" 
+  | Seq' (expr'_list) -> (List.fold_left (fun  acc_string expr'-> acc_string^ (generate_asm consts fvars expr')^"\n")  "" expr'_list )
+  | Or' (expr'_list) -> (let generated = List.map (fun expr' -> (generate_asm consts fvars expr')) expr'_list in
+                          let generated = add_to_or generated [] in
+                          List.fold_left (fun acc str -> acc^str) "" generated)
+  
+  | _ -> raise X_not_yet_implemented 
+  ;;
+
+  let make_consts_tbl asts = make_list_for_consts_tbl asts;;
+  let make_fvars_tbl asts = primitive_vars@ (make_free_var_table asts);;
+  let generate consts fvars e = generate_asm consts fvars e;;
+  
 end;;
 
