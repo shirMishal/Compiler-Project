@@ -85,6 +85,7 @@ let symbol_object_length = 9;;
 let string_object_length = 9;;
 let char_object_length = 2;;
 
+
 let primitive_vars = 
   [("boolean?", 0); ("float?", 1); ("integer?", 2); ("pair?", 3);
    ("null?", 4); ("char?", 5); ("string?", 6);
@@ -123,7 +124,7 @@ let list_of_names = SS.elements set_of_names in
   (List.map 
     (fun name ->
       let old_count = !offset_counter in
-        offset_counter:= !offset_counter + 8;
+        offset_counter:= !offset_counter ;
         (name, old_count)) 
     list_of_names);;
 
@@ -279,6 +280,15 @@ match sexpr_list with
               | Sexpr(TaggedSexpr(name, value)) -> make_tuples tl offset const_tbl 
               | _ -> raise (X_this_shouldnt_happen_error "from tuple"))
 ;;
+
+let rec find_offset_fvars v fvars =
+match fvars with
+| [] -> raise X_this_should_not_happen
+| hd::tl -> 
+  (match hd with
+  | (name, offset) -> if name = v then offset else (find_offset_fvars v tl)
+  )
+  ;;
 (*| Bool of bool
   | Nil
   | Number of tuple
@@ -305,6 +315,7 @@ match sexpr_list with
   | Const'(constant) -> (Printf.sprintf "lea rax, [const_tbl + %d]" (find_offset constant consts)) (* foramtted string *)
   *)
   | Const'(constant) -> (Printf.sprintf "lea rax, [const_tbl+ %d]" (find_offset constant consts))
+  | Var'(VarFree (v)) -> (Printf.sprintf "mov rax, qword [fvar_tbl + %d * WORD_SIZE]" (find_offset_fvars v fvars))
   | _ -> raise X_not_yet_implemented
     
   ;;
