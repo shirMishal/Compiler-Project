@@ -14,8 +14,9 @@ module type CODE_GEN = sig
      For example: [(Sexpr(Nil), (1, "SOB_NIL"))]
    *)
 (*val make_constant_lists : expr' list -> constant*)
+  val rename_refs : expr' list -> expr' list 
   val make_consts_tbl : expr' list -> (constant * (int * string)) list
-
+  
   (* This signature assumes the structure of the fvars table is
      a list of key-value pairs:
      - The keys are the fvar names as strings
@@ -227,7 +228,7 @@ match ast_expr' with
 
 
   let make_constant_lists asts = (*returns list contains sexprs for all asts with sub constant with no dup with no obligatory*)
-  let asts_renamed = rename_refs asts in
+  let asts_renamed = (*rename_refs*) asts in
   let list_of_constants_lists =  List.map make_constants_list asts_renamed in
   let list_of_all_constants = List.flatten list_of_constants_lists in
   let set_of_all_constants = rem_dup list_of_all_constants in (*flat list with no dup of all constant *)
