@@ -318,12 +318,20 @@ match fvars with
   | _ -> raise X_not_yet_implemented 
   ;;
 *)
-  let rec add_to_or generated_list list_to_return =
+
+let uniq_lable_counter = ref (-1)
+let get_uniq_lable str =
+uniq_lable_counter:= !uniq_lable_counter +1;
+str^(string_of_int(!uniq_lable_counter));;
+
+
+
+  let rec add_to_or lexit generated_list list_to_return =
   match generated_list with
   | []-> list_to_return
   | hd::tl -> (match tl with
-                | [] -> (add_to_or tl (list_to_return@[hd^"\n Lexit: "]))
-                | _ -> (add_to_or tl (list_to_return@[hd^"\n cmp rax, SOB_FALSE_ADDRESS \n jne Lexit\n"]))
+                | [] -> (add_to_or lexit tl (list_to_return@[hd^"\n "^lexit^": "]))
+                | _ -> (add_to_or lexit tl (list_to_return@[hd^"\n cmp rax, SOB_FALSE_ADDRESS \n jne "^lexit^"\n"]))
                 );;
 
   let rec generate_asm consts fvars e = 
@@ -333,8 +341,14 @@ match fvars with
   | Def' (Var'(VarFree (v)) , expr') -> (generate_asm consts fvars expr')^"\n mov [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n lea rax, [const_tbl+1] \n" 
   | Seq' (expr'_list) -> (List.fold_left (fun  acc_string expr'-> acc_string^ (generate_asm consts fvars expr')^"\n")  "" expr'_list )
   | Or' (expr'_list) -> (let generated = List.map (fun expr' -> (generate_asm consts fvars expr')) expr'_list in
-                          let generated = add_to_or generated [] in
+                          let lexit = get_uniq_lable "Lexit" in
+                          let generated = add_to_or lexit generated [] in
                           List.fold_left (fun acc str -> acc^str) "" generated)
+  | If' (test_expr', then_expr' , else_expr') -> (let lexit = get_uniq_lable "Lexit" in
+                                                  let lelse = get_uniq_lable "Lelse" in
+                                                  (generate_asm consts fvars test_expr')^"\n cmp rax, SOB_FALSE_ADDRESS \n je "^lelse^" \n"^(generate_asm consts fvars then_expr')^"\n jmp "^lexit^" \n "^lelse^":\n"^(generate_asm consts fvars else_expr')^"\n "^lexit^": \n"
+                                                  )
+  | Set'(Var'(VarFree(v)), expr') -> (generate_asm consts fvars expr')^ "\n mov qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n mov rax, SOB_VOID_ADDRESS \n"                                             
   
   | _ -> raise X_not_yet_implemented 
   ;;
