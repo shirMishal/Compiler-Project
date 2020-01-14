@@ -306,14 +306,14 @@ match fvars with
   let make_list_for_consts_tbl asts =
   (replace_tagref (make_tuples (make_constant_lists asts) 6 (add_obligatory [])));;
 (*
-  let rec generate_asm consts fvars e = 
+  let rec generate_asm_known_env_size consts fvars e = 
   match e with
   (*| Const'(Sexpr(Pair (car, cdr))) -> (Printf.sprintf "mov rax, (const_tbl+ %d)" (find_offset (Sexpr(Pair (car, cdr))) consts)) (* foramtted string *)
   | Const'(constant) -> (Printf.sprintf "lea rax, [const_tbl + %d]" (find_offset constant consts)) (* foramtted string *)
   *)
   | Const'(constant) -> (Printf.sprintf "lea rax, [const_tbl+ %d]" (find_offset constant consts))
   | Var'(VarFree (v)) -> (Printf.sprintf "mov rax, qword [fvar_tbl + %d * WORD_SIZE]" (find_offset_fvars v fvars))
-  | Def' (Var'(VarFree (v)) , expr') -> (generate_asm consts fvars expr');
+  | Def' (Var'(VarFree (v)) , expr') -> (generate_asm_known_env_size consts fvars expr');
                                         (Printf.sprintf "\n mov [fvar_tbl + %d * WORD_SIZE], rax" (find_offset_fvars v fvars)) 
   | _ -> raise X_not_yet_implemented 
   ;;
@@ -324,7 +324,7 @@ let get_uniq_lable str =
 uniq_lable_counter:= !uniq_lable_counter +1;
 str^(string_of_int(!uniq_lable_counter));;
 
-
+let format_string = Printf.sprintf;;
 
   let rec add_to_or lexit generated_list list_to_return =
   match generated_list with
@@ -334,28 +334,64 @@ str^(string_of_int(!uniq_lable_counter));;
                 | _ -> (add_to_or lexit tl (list_to_return@[hd^"\n cmp rax, SOB_FALSE_ADDRESS \n jne "^lexit^"\n"]))
                 );;
 
-  let rec generate_asm consts fvars e = 
+  let rec generate_asm env_size consts fvars e = 
+  let generate_asm_known_env_size = (generate_asm env_size) in
   match e with
-  | Const'(constant) -> "lea rax, [const_tbl+ "^(string_of_int (find_offset constant consts)) ^"]" 
-  | Var'(VarFree (v)) -> "mov rax, qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE]" 
-  | Def' (Var'(VarFree (v)) , expr') -> (generate_asm consts fvars expr')^"\n mov [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n lea rax, [const_tbl+1] \n" 
-  | Seq' (expr'_list) -> (List.fold_left (fun  acc_string expr'-> acc_string^ (generate_asm consts fvars expr')^"\n")  "" expr'_list )
-  | Or' (expr'_list) -> (let generated = List.map (fun expr' -> (generate_asm consts fvars expr')) expr'_list in
+  | Const'(constant) -> ";constant\n" ^ "lea rax, [const_tbl+ "^(string_of_int (find_offset constant consts)) ^"]" 
+  | Var'(var) -> 
+  ( match var with
+    | VarFree (v) -> ";free variable:\n" ^ "mov rax, qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE]"
+    | VarParam(_, minor) -> ";parameter variable:\n" ^ (format_string "mov rax, [rbx + WORD_SIZE * (4 + %d)]" minor)
+    | VarBound(_, major, minor) -> ";bound variable:\n" ^ "mov rbx, [rbp + WORD_SIZE * 2]" ^ "\n" ^ (format_string "mov rbx, [rbx + WORD_SIZE * %d]" major) ^ "\n" ^ (format_string "mov rax, [rbx + WORD_SIZE * %d]" minor)
+  )
+  | Def' (Var'(VarFree (v)) , expr') -> ";define:\n" ^ (generate_asm_known_env_size consts fvars expr') ^ "mov [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n lea rax, [const_tbl+1] \n" 
+  | Seq' (expr'_list) -> ";sequence:\n" ^ (List.fold_left (fun  acc_string expr' -> acc_string ^ (generate_asm_known_env_size consts fvars expr') ^ "\n")  "" expr'_list )
+  | Or' (expr'_list) -> (let generated = List.map (fun expr' -> (generate_asm_known_env_size consts fvars expr')) expr'_list in
                           let lexit = get_uniq_lable "Lexit" in
                           let generated = add_to_or lexit generated [] in
-                          List.fold_left (fun acc str -> acc^str) "" generated)
-  | If' (test_expr', then_expr' , else_expr') -> (let lexit = get_uniq_lable "Lexit" in
+                          ";or:\n" ^ List.fold_left (fun acc str -> acc^str) "" generated)
+  | If' (test_expr', then_expr' , else_expr') -> ";if:\n" ^ (let lexit = get_uniq_lable "Lexit" in
                                                   let lelse = get_uniq_lable "Lelse" in
-                                                  (generate_asm consts fvars test_expr')^"\n cmp rax, SOB_FALSE_ADDRESS \n je "^lelse^" \n"^(generate_asm consts fvars then_expr')^"\n jmp "^lexit^" \n "^lelse^":\n"^(generate_asm consts fvars else_expr')^"\n "^lexit^": \n"
+                                                  (generate_asm_known_env_size consts fvars test_expr')^"\n cmp rax, SOB_FALSE_ADDRESS \n je "^lelse^" \n"^(generate_asm_known_env_size consts fvars then_expr')^"\n jmp "^lexit^" \n "^lelse^":\n"^(generate_asm_known_env_size consts fvars else_expr')^"\n "^lexit^": \n"
                                                   )
-  | Set'(Var'(VarFree(v)), expr') -> (generate_asm consts fvars expr')^ "\n mov qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n mov rax, SOB_VOID_ADDRESS \n"                                             
-  
+  | Set'(Var'(var), expr') -> (
+    let setted_value = (generate_asm_known_env_size consts fvars expr') in
+    ";set:\n" ^
+    match var with
+    | VarFree(v) -> setted_value ^ "\n mov qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n"
+    | VarParam(_, minor) -> setted_value ^ "\n" ^ (format_string "mov qword [rbp + WORD_SIZE * (4 * %d), rax" minor)  ^ "\n"
+    | VarBound(_, major, minor) -> setted_value ^ "\n" ^ "mov rbx, [rbp + WORD_SIZE * 2]" ^ "\n" ^ (format_string "mov rbx, [rbx + WORD_SIZE * %d]" major) ^ "\n" ^ (format_string "mov qword [rbx + WORD_SIZE * %d], rax" minor) ^ "\n"
+  ) ^ "mov rax, SOB_VOID_ADDRESS \n" 
+  | BoxGet'(var) -> ";box get:\n" ^ (generate_asm_known_env_size var consts fvars var) ^ "\n" ^ "mov qword rax, [rax]" ^ "\n"
+  | BoxSet'(var, expr) -> ";box set:\n" ^ (generate_asm_known_env_size consts fvars expr) ^ "\n" ^ "push rax" ^ "\n" ^ (generate_asm_known_env_size consts fvars var) ^ "\n" ^ "pop rbx" ^ "\n" ^ "mov qword [rax], rbx"
+  (* TODO: box *)
+  | LambdaSimple'(_, body_expr') ->
+    let first_loop_label = (get_uniq_lable "copy_pointers") in
+    let second_loop_label = (get_uniq_lable "copy_parameters") in
+    let lcode_label = (get_uniq_lable "Lcode") in
+    let lcont_label = (get_uniq_lable "Lcont") in
+    ";simple lambda:\n" ^
+    (format_string "lea rbx, [%d + 1]" env_size) ^ "\n" ^ "MALLOC rax, rbx" ^ "\n" ^ "push rax ; pushing ext_env for later \n" ^ ";copying pointers:\n" ^
+    (format_string "mov rcx, %d" env_size) ^ "\n" ^ first_loop_label ^ ":" ^ "\n" ^
+    "push rcx" ^ "\n" ^ (format_string "lea rcx, [%d - rcx]" env_size) ^ "mov rbx, [rbp + WORD_SIZE * 2] ; getting pointer to old env" ^ "\n" ^
+    "mov rdx, [rbx + rcx * WORD_SIZE] ; getting to rdx old_env[i]" ^ "\n" ^ "inc rcx" ^ "\n" ^ "mov [rax + WORD_SIZE * rcx], rdx ; putting env[i] (stored in rdx) into ext_env[i + 1]" ^ "\n" ^
+    "pop rcx ; restoring counter" ^ "\n" ^
+    "loop " ^ first_loop_label ^ "\n" ^ "mov rcx, [rbp + 3 * WORD_SIZE] ; getting to rcx the number of the current parameters \n" ^
+    "MALLOC rbx, rcx" ^ "\n" ^ "mov qword [rax], rbx ; getting the new allocated memory pointer to ext_env[0]" ^ "\n" ^
+    "mov rax, rbx ; more convinient with pointer to extenv[0] in rax \n" ^ "\n" ^ "mov rbx, rcx ; rbx will be constant and hold the size of params" ^ "; copying parameters to new env \n" ^
+    second_loop_label ^ ": \n" ^ "push rcx" ^ "\n" ^
+    "lea rcx, [rbx - rcx] ; rcx starts high and decreases with iterations" ^ "\n" ^
+    "lea rdx, [rbp + WORD_SIZE * rcx]" ^ "\n" ^ "add rdx, 4 ; now rdx has the address of param_i \n" ^
+    "mov rdx, [rdx] ; now rdx has the param_i \n" ^ "mov [rax + WORD_SIZE * rcx], rdx \n" ^ "pop rcx" ^ "\n" ^
+    "loop " ^ second_loop_label ^ "\n" ^ "pop rbx" ^ "\n" ^ (format_string "MAKE_CLOSURE(rax, rbx, %s" lcode_label) ^ "\n" ^ (format_string "jmp %s" lcont_label) ^ "\n" ^ 
+    lcode_label ^ ": \n" ^ "push rbp" ^ "\n" ^ "mov rbp, rsp" ^ "\n" ^
+    (generate_asm (env_size + 1)) ^ "\n" ^ "leave" ^ "\n" ^ "ret" ^ "\n" ^ lcont_label ^ ": \n"
   | _ -> raise X_not_yet_implemented 
   ;;
 
   let make_consts_tbl asts = make_list_for_consts_tbl asts;;
   let make_fvars_tbl asts = primitive_vars@ (make_free_var_table asts);;
-  let generate consts fvars e = generate_asm consts fvars e;;
+  let generate consts fvars e = generate_asm 0 consts fvars e;;
   
 end;;
 
