@@ -362,30 +362,68 @@ let format_string = Printf.sprintf;;
     | VarParam(_, minor) -> setted_value ^ "\n" ^ (format_string "mov qword [rbp + WORD_SIZE * (4 * %d), rax" minor)  ^ "\n"
     | VarBound(_, major, minor) -> setted_value ^ "\n" ^ "mov rbx, [rbp + WORD_SIZE * 2]" ^ "\n" ^ (format_string "mov rbx, [rbx + WORD_SIZE * %d]" major) ^ "\n" ^ (format_string "mov qword [rbx + WORD_SIZE * %d], rax" minor) ^ "\n"
   ) ^ "mov rax, SOB_VOID_ADDRESS \n" 
-  | BoxGet'(var) -> ";box get:\n" ^ (generate_asm_known_env_size var consts fvars var) ^ "\n" ^ "mov qword rax, [rax]" ^ "\n"
-  | BoxSet'(var, expr) -> ";box set:\n" ^ (generate_asm_known_env_size consts fvars expr) ^ "\n" ^ "push rax" ^ "\n" ^ (generate_asm_known_env_size consts fvars var) ^ "\n" ^ "pop rbx" ^ "\n" ^ "mov qword [rax], rbx"
+  | BoxGet'(var) -> ";box get:\n" ^ (generate_asm_known_env_size consts fvars (Var'(var))) ^ "\n" ^ "mov qword rax, [rax]" ^ "\n"
+  | BoxSet'(var, expr) -> ";box set:\n" ^ (generate_asm_known_env_size consts fvars expr) ^ "\n" ^ "push rax" ^ "\n" ^ (generate_asm_known_env_size consts fvars (Var'(var))) ^ "\n" ^ "pop rbx" ^ "\n" ^ "mov qword [rax], rbx"
   (* TODO: box *)
   | LambdaSimple'(_, body_expr') ->
     let first_loop_label = (get_uniq_lable "copy_pointers") in
     let second_loop_label = (get_uniq_lable "copy_parameters") in
+    let end_of_pointers_loop = (get_uniq_lable "end_pointers_copy") in
+    let end_of_parameters_loop = (get_uniq_lable "end_parameters_copy") in
     let lcode_label = (get_uniq_lable "Lcode") in
     let lcont_label = (get_uniq_lable "Lcont") in
     ";simple lambda:\n" ^
-    (format_string "lea rbx, [%d + 1]" env_size) ^ "\n" ^ "MALLOC rax, rbx" ^ "\n" ^ "push rax ; pushing ext_env for later \n" ^ ";copying pointers:\n" ^
-    (format_string "mov rcx, %d" env_size) ^ "\n" ^ first_loop_label ^ ":" ^ "\n" ^
-    "push rcx" ^ "\n" ^ (format_string "lea rcx, [%d - rcx]" env_size) ^ "mov rbx, [rbp + WORD_SIZE * 2] ; getting pointer to old env" ^ "\n" ^
-    "mov rdx, [rbx + rcx * WORD_SIZE] ; getting to rdx old_env[i]" ^ "\n" ^ "inc rcx" ^ "\n" ^ "mov [rax + WORD_SIZE * rcx], rdx ; putting env[i] (stored in rdx) into ext_env[i + 1]" ^ "\n" ^
+    (format_string "lea rbx, [%d + 1]" env_size) ^ "\n" ^
+    "mul rbx, WORD_SIZE" ^ "\n" ^ (*TODO: verify this*)
+    "MALLOC rax, rbx" ^ "\n" ^
+    "push rax ; pushing ext_env for later \n" ^
+    ";copying pointers:\n" ^
+    (format_string "mov rcx, %d" env_size) ^ "\n" ^ 
+    "cmp rcx, 0" ^ "\n" ^
+    (format_string "je %s" end_of_pointers_loop) ^ "\n" ^
+    first_loop_label ^ ":" ^ "\n" ^
+    "push rcx" ^ "\n" ^
+    "neg rcx" ^ "\n" ^
+    (format_string "add rcx, %d" env_size) ^ "\n" ^
+    "mov rbx, [rbp + WORD_SIZE * 2] ; getting pointer to old env" ^ "\n" ^
+    "mov rdx, [rbx + rcx * WORD_SIZE] ; getting to rdx old_env[i]" ^ "\n" ^
+    "inc rcx" ^ "\n" ^
+    "mov [rax + WORD_SIZE * rcx], rdx ; putting env[i] (stored in rdx) into ext_env[i + 1]" ^ "\n" ^
     "pop rcx ; restoring counter" ^ "\n" ^
-    "loop " ^ first_loop_label ^ "\n" ^ "mov rcx, [rbp + 3 * WORD_SIZE] ; getting to rcx the number of the current parameters \n" ^
-    "MALLOC rbx, rcx" ^ "\n" ^ "mov qword [rax], rbx ; getting the new allocated memory pointer to ext_env[0]" ^ "\n" ^
-    "mov rax, rbx ; more convinient with pointer to extenv[0] in rax \n" ^ "\n" ^ "mov rbx, rcx ; rbx will be constant and hold the size of params" ^ "; copying parameters to new env \n" ^
-    second_loop_label ^ ": \n" ^ "push rcx" ^ "\n" ^
-    "lea rcx, [rbx - rcx] ; rcx starts high and decreases with iterations" ^ "\n" ^
-    "lea rdx, [rbp + WORD_SIZE * rcx]" ^ "\n" ^ "add rdx, 4 ; now rdx has the address of param_i \n" ^
-    "mov rdx, [rdx] ; now rdx has the param_i \n" ^ "mov [rax + WORD_SIZE * rcx], rdx \n" ^ "pop rcx" ^ "\n" ^
-    "loop " ^ second_loop_label ^ "\n" ^ "pop rbx" ^ "\n" ^ (format_string "MAKE_CLOSURE(rax, rbx, %s" lcode_label) ^ "\n" ^ (format_string "jmp %s" lcont_label) ^ "\n" ^ 
-    lcode_label ^ ": \n" ^ "push rbp" ^ "\n" ^ "mov rbp, rsp" ^ "\n" ^
-    (generate_asm (env_size + 1)) ^ "\n" ^ "leave" ^ "\n" ^ "ret" ^ "\n" ^ lcont_label ^ ": \n"
+    "loop " ^ first_loop_label ^ "\n" ^
+    (format_string "%s:" end_of_pointers_loop) ^ "\n" ^
+    "mov rcx, [rbp + 3 * WORD_SIZE] ; getting to rcx the number of the current parameters \n" ^
+    "mul rcx, WORD_SIZE" ^ "\n" ^
+    "MALLOC rbx, rcx" ^ "\n" ^
+    "mov qword [rax], rbx ; getting the new allocated memory pointer to ext_env[0]" ^ "\n" ^
+    "mov rax, rbx ; more convinient with pointer to extenv[0] in rax \n" ^ "\n" ^ 
+    "mov rbx, rcx ; rbx will be constant and hold the size of params" ^ "\n" ^ 
+    "; copying parameters to new env \n" ^
+    "cmp rbx, 0" ^ "\n" ^ 
+    (format_string "je %s" end_of_parameters_loop) ^ "\n" ^ 
+    second_loop_label ^ ": \n" ^ 
+    "push rcx" ^ "\n" ^
+    "neg rcx" ^ "\n" ^
+    "add rcx, rbx ; rcx starts high and decreases with iterations" ^ "\n" ^
+    "lea rdx, [rbp + WORD_SIZE * rcx]" ^ "\n" ^ 
+    "add rdx, 4 * WORD_SIZE ; now rdx has the address of param_i \n" ^
+    "mov rdx, [rdx] ; now rdx has the param_i \n" ^ 
+    "mov [rax + WORD_SIZE * rcx], rdx \n" ^ 
+    "pop rcx" ^ "\n" ^
+    "loop " ^ second_loop_label ^ "\n" ^ 
+    (format_string "%s:\n" end_of_parameters_loop) ^
+    "pop rbx" ^ "\n" ^ 
+    (format_string "MAKE_CLOSURE(rax, rbx, %s)" lcode_label) ^ "\n" ^ 
+    (format_string "jmp %s" lcont_label) ^ "\n" ^ 
+    lcode_label ^ ": \n" ^ 
+    "push rbp" ^ "\n" ^ 
+    "mov rbp, rsp" ^ "\n" ^
+    (generate_asm (env_size + 1) consts fvars body_expr') ^ "\n" ^ 
+    "leave" ^ "\n" ^ 
+    "ret" ^ "\n" ^ 
+    lcont_label ^ ": \n"
+  | Applic'(operator, operand_list) -> "; Applic:\n" ^
+    (List.fold_left (fun acc operand -> acc ^ (generate_asm_known_env_size constants fvars operand)) "" operand_list)
   | _ -> raise X_not_yet_implemented 
   ;;
 
