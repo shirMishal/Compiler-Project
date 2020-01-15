@@ -374,7 +374,7 @@ let format_string = Printf.sprintf;;
     let lcont_label = (get_uniq_lable "Lcont") in
     ";simple lambda:\n" ^
     (format_string "lea rbx, [%d + 1]" env_size) ^ "\n" ^
-    "mul rbx, WORD_SIZE" ^ "\n" ^ (*TODO: verify this*)
+    "shl rbx, 3" ^ "\n" ^ (*TODO: verify this*)
     "MALLOC rax, rbx" ^ "\n" ^
     "push rax ; pushing ext_env for later \n" ^
     ";copying pointers:\n" ^
@@ -393,7 +393,7 @@ let format_string = Printf.sprintf;;
     "loop " ^ first_loop_label ^ "\n" ^
     (format_string "%s:" end_of_pointers_loop) ^ "\n" ^
     "mov rcx, [rbp + 3 * WORD_SIZE] ; getting to rcx the number of the current parameters \n" ^
-    "mul rcx, WORD_SIZE" ^ "\n" ^
+    "shl rcx, 3" ^ "\n" ^
     "MALLOC rbx, rcx" ^ "\n" ^
     "mov qword [rax], rbx ; getting the new allocated memory pointer to ext_env[0]" ^ "\n" ^
     "mov rax, rbx ; more convinient with pointer to extenv[0] in rax \n" ^ "\n" ^ 
