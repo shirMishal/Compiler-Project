@@ -421,9 +421,30 @@ let format_string = Printf.sprintf;;
     (generate_asm (env_size + 1) consts fvars body_expr') ^ "\n" ^ 
     "leave" ^ "\n" ^ 
     "ret" ^ "\n" ^ 
-    lcont_label ^ ": \n"
-  | Applic'(operator, operand_list) -> "; Applic:\n" ^
-    (List.fold_left (fun acc operand -> acc ^ (generate_asm_known_env_size constants fvars operand)) "" operand_list)
+    lcont_label ^ ": \n" 
+  | Applic' (proc_expr' , arg_list) ->
+    ";applic:\n"^
+    ";push magic:\n"^
+    "mov rbx, 0"^"\n"^ "push rbx"^"\n"^
+    (List.fold_right (fun expr'_arg acc_string-> acc_string ^ (generate_asm_known_env_size consts fvars expr'_arg) ^ "\n"^"push rax"^"\n")   arg_list "")^
+    ";push num of args: \n"^
+    "mov rbx,"^(string_of_int (List.length arg_list)) ^"\n"^ "push rbx"^"\n"^
+    ";generate proc:\n"^
+    (generate_asm_known_env_size consts fvars proc_expr')^"\n"^
+    ";assuming we get correct input, no need to check type closure \n"^
+    "add rax, TYPE_SIZE \n"^
+    "mov rbx,[rax] ;rbx contains pointer to env"^"\n"^
+    "push rbx      ;push env pointer"^"\n"^
+    "add rax, WORD_SIZE \n"^
+    "mov rbx,[rax] ;rbx contains pointer to code"^"\n"^(*check its correct*)
+    "call rbx"^"\n"^
+    ";clean stack"^"\n"^
+    "add rsp, WORD_SIZE *1 ; pop env\n"^
+    "pop rbx               ; pop arg count"^"\n"^
+    "shl rbx, 3            ; rbx = rbx * 8"^"\n"^
+    "add rbx, WORD_SIZE    ; clean magic"^"\n"^
+    "add rsp, rbx          ; pop args"^"\n"
+  
   | _ -> raise X_not_yet_implemented 
   ;;
 
@@ -433,3 +454,5 @@ let format_string = Printf.sprintf;;
   
 end;;
 
+(*mov bl, [rax]
+    cmp bl, T_CLOSURE*)
