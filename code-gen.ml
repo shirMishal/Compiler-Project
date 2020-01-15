@@ -94,7 +94,7 @@ let primitive_vars =
    ("symbol->string", 13); 
    ("char->integer", 14); ("integer->char", 15); ("eq?", 16);
    ("+", 17); ("*", 18);( "-", 19); ("/", 20); ("<", 21); ("=", 22)
-(* you can add yours here *); ("car",23); ("cdr",24); ("cons",25)];;
+(* you can add yours here *); ("car",23); ("cdr",24); ("cons",25); ("set-car!",26); ("set-cdr!",27)];;
 
 let rec make_free_var_set current_set_of_names ast_expr' = 
 let make_set_local = (make_free_var_set current_set_of_names) in
@@ -337,7 +337,7 @@ let format_string = Printf.sprintf;;
   let rec generate_asm env_size consts fvars e = 
   let generate_asm_known_env_size = (generate_asm env_size) in
   match e with
-  | Const'(constant) -> ";constant\n" ^ "lea rax, [const_tbl+ "^(string_of_int (find_offset constant consts)) ^"]" 
+  | Const'(constant) -> ";constant\n" ^ "lea rax, [const_tbl+ "^(string_of_int (find_offset constant consts)) ^"]\n" 
   | Var'(var) -> 
   ( match var with
     | VarFree (v) -> ";free variable:\n" ^ "mov rax, qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE]"
@@ -359,7 +359,7 @@ let format_string = Printf.sprintf;;
     ";set:\n" ^
     match var with
     | VarFree(v) -> setted_value ^ "\n mov qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n"
-    | VarParam(_, minor) -> setted_value ^ "\n" ^ (format_string "mov qword [rbp + WORD_SIZE * (4 * %d), rax" minor)  ^ "\n"
+    | VarParam(_, minor) -> setted_value ^ "\n" ^ (format_string "mov qword [rbp + WORD_SIZE * (4 * %d)], rax" minor)  ^ "\n"
     | VarBound(_, major, minor) -> setted_value ^ "\n" ^ "mov rbx, [rbp + WORD_SIZE * 2]" ^ "\n" ^ (format_string "mov rbx, [rbx + WORD_SIZE * %d]" major) ^ "\n" ^ (format_string "mov qword [rbx + WORD_SIZE * %d], rax" minor) ^ "\n"
   ) ^ "mov rax, SOB_VOID_ADDRESS \n" 
   | BoxGet'(var) -> ";box get:\n" ^ (generate_asm_known_env_size consts fvars (Var'(var))) ^ "\n" ^ "mov qword rax, [rax]" ^ "\n"

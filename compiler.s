@@ -49,6 +49,9 @@ db %2
 ;---------------------------------------------------------------------
 %define MAKE_LITERAL_SYMBOL(address) MAKE_LITERAL T_SYMBOL, dq address
 
+%define LOWER_DATA(sob) qword [sob + TYPE_SIZE]
+%define UPPER_DATA(sob) qword [sob + WORD_SIZE + TYPE_SIZE]
+
 %macro SKIP_TYPE_TAG 2
 	mov %1, qword [%2+TYPE_SIZE]	
 %endmacro	

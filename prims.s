@@ -29,6 +29,30 @@ cons_:
     leave
     ret
 
+set_car:
+    push rbp
+    mov rbp, rsp
+
+    mov rbx, PVAR(0)
+    mov rcx, PVAR(1)
+    mov LOWER_DATA(rbx) , rcx
+    mov rax, SOB_VOID_ADDRESS
+
+    leave
+    ret
+
+set_cdr:
+    push rbp
+    mov rbp, rsp
+
+    mov rbx, PVAR(0)
+    mov rcx, PVAR(1)
+    mov UPPER_DATA(rbx) , rcx
+    mov rax, SOB_VOID_ADDRESS
+
+    leave
+    ret
+
 is_boolean:
     push rbp
     mov rbp, rsp
