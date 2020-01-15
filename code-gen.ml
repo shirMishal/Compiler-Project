@@ -94,7 +94,7 @@ let primitive_vars =
    ("symbol->string", 13); 
    ("char->integer", 14); ("integer->char", 15); ("eq?", 16);
    ("+", 17); ("*", 18);( "-", 19); ("/", 20); ("<", 21); ("=", 22)
-(* you can add yours here *)];;
+(* you can add yours here *); ("car",23); ("cdr",24); ("cons",25)];;
 
 let rec make_free_var_set current_set_of_names ast_expr' = 
 let make_set_local = (make_free_var_set current_set_of_names) in
@@ -117,7 +117,7 @@ SS.union current_set_of_names (match ast_expr' with
 | _ -> SS.empty);;
 
 let make_free_var_table asts =
-let offset_counter = ref 23 in
+let offset_counter = ref (List.length primitive_vars ) in
 let list_of_set_of_names = (map (make_free_var_set SS.empty) asts) in
 let set_of_names = (List.fold_left SS.union SS.empty list_of_set_of_names) in
 let list_of_names = SS.elements set_of_names in

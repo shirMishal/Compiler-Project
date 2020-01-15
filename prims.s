@@ -1,3 +1,34 @@
+car_:
+    push rbp
+    mov rbp, rsp
+
+    mov rbx, PVAR(0) 
+    CAR rax,rbx
+
+    leave
+    ret
+
+cdr_:
+    push rbp
+    mov rbp, rsp
+
+    mov rbx, PVAR(0) 
+    CDR rax,rbx
+    
+    leave
+    ret
+
+cons_:
+    push rbp
+    mov rbp, rsp
+
+    mov rbx, PVAR(0)
+    mov rcx, PVAR(1) 
+    MAKE_PAIR(rax, rbx, rcx)
+    
+    leave
+    ret
+
 is_boolean:
     push rbp
     mov rbp, rsp
