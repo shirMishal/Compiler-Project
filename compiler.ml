@@ -58,7 +58,6 @@ global main
 section .text
 main:
     push rbp
-    mov rbp,rsp
 
     ;; set up the heap
     mov rdi, GB(4)
@@ -74,6 +73,9 @@ main:
     push qword SOB_NIL_ADDRESS
     push qword T_UNDEFINED
     push rsp
+
+    mov rbp,rsp
+
 
     ;; Set up the primitive stdlib fvars:
     ;; Since the primtive procedures are defined in assembly,
