@@ -94,7 +94,7 @@ let primitive_vars =
    ("symbol->string", 13); 
    ("char->integer", 14); ("integer->char", 15); ("eq?", 16);
    ("+", 17); ("*", 18);( "-", 19); ("/", 20); ("<", 21); ("=", 22)
-(* you can add yours here *)];;
+(* you can add yours here *); ("car",23); ("cdr",24); ("cons",25); ("set-car!",26); ("set-cdr!",27)];;
 
 let rec make_free_var_set current_set_of_names ast_expr' = 
 let make_set_local = (make_free_var_set current_set_of_names) in
@@ -117,7 +117,7 @@ SS.union current_set_of_names (match ast_expr' with
 | _ -> SS.empty);;
 
 let make_free_var_table asts =
-let offset_counter = ref 23 in
+let offset_counter = ref (List.length primitive_vars ) in
 let list_of_set_of_names = (map (make_free_var_set SS.empty) asts) in
 let set_of_names = (List.fold_left SS.union SS.empty list_of_set_of_names) in
 let list_of_names = SS.elements set_of_names in
@@ -337,11 +337,11 @@ let format_string = Printf.sprintf;;
   let rec generate_asm env_size consts fvars e = 
   let generate_asm_known_env_size = (generate_asm env_size) in
   match e with
-  | Const'(constant) -> ";constant\n" ^ "lea rax, [const_tbl+ "^(string_of_int (find_offset constant consts)) ^"]" 
+  | Const'(constant) -> ";constant\n" ^ "lea rax, [const_tbl+ "^(string_of_int (find_offset constant consts)) ^"]\n" 
   | Var'(var) -> 
   ( match var with
     | VarFree (v) -> ";free variable:\n" ^ "mov rax, qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE]"
-    | VarParam(_, minor) -> ";parameter variable:\n" ^ (format_string "mov rax, [rbx + WORD_SIZE * (4 + %d)]" minor)
+    | VarParam(_, minor) -> ";parameter variable:\n" ^ (format_string "mov rax, [rbp + WORD_SIZE * (4 + %d)]" minor)
     | VarBound(_, major, minor) -> ";bound variable:\n" ^ "mov rbx, [rbp + WORD_SIZE * 2]" ^ "\n" ^ (format_string "mov rbx, [rbx + WORD_SIZE * %d]" major) ^ "\n" ^ (format_string "mov rax, [rbx + WORD_SIZE * %d]" minor)
   )
   | Def' (Var'(VarFree (v)) , expr') -> ";define:\n" ^ (generate_asm_known_env_size consts fvars expr') ^ "mov [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n lea rax, [const_tbl+1] \n" 
@@ -359,7 +359,7 @@ let format_string = Printf.sprintf;;
     ";set:\n" ^
     match var with
     | VarFree(v) -> setted_value ^ "\n mov qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n"
-    | VarParam(_, minor) -> setted_value ^ "\n" ^ (format_string "mov qword [rbp + WORD_SIZE * (4 * %d), rax" minor)  ^ "\n"
+    | VarParam(_, minor) -> setted_value ^ "\n" ^ (format_string "mov qword [rbp + WORD_SIZE * (4 + %d)], rax" minor)  ^ "\n"
     | VarBound(_, major, minor) -> setted_value ^ "\n" ^ "mov rbx, [rbp + WORD_SIZE * 2]" ^ "\n" ^ (format_string "mov rbx, [rbx + WORD_SIZE * %d]" major) ^ "\n" ^ (format_string "mov qword [rbx + WORD_SIZE * %d], rax" minor) ^ "\n"
   ) ^ "mov rax, SOB_VOID_ADDRESS \n" 
   | BoxGet'(var) -> ";box get:\n" ^ (generate_asm_known_env_size consts fvars (Var'(var))) ^ "\n" ^ "mov qword rax, [rax]" ^ "\n"
@@ -425,8 +425,8 @@ let format_string = Printf.sprintf;;
   | Applic' (proc_expr' , arg_list) ->
     ";applic:\n"^
     ";push magic:\n"^
-    "mov rbx, 0"^"\n"^ "push rbx"^"\n"^
-    (List.fold_right (fun expr'_arg acc_string-> acc_string ^ (generate_asm_known_env_size consts fvars expr'_arg) ^ "\n"^"push rax"^"\n")   arg_list "")^
+      "mov rbx, 0"^"\n"^ "push rbx"^"\n"^
+    (List.fold_right (fun expr'_arg acc_string-> acc_string ^ (generate_asm_known_env_size consts fvars expr'_arg) ^ "\n"^"push rax"^"\n")  arg_list "")^
     ";push num of args: \n"^
     "mov rbx,"^(string_of_int (List.length arg_list)) ^"\n"^ "push rbx"^"\n"^
     ";generate proc:\n"^
@@ -444,7 +444,107 @@ let format_string = Printf.sprintf;;
     "shl rbx, 3            ; rbx = rbx * 8"^"\n"^
     "add rbx, WORD_SIZE    ; clean magic"^"\n"^
     "add rsp, rbx          ; pop args"^"\n"
-  
+  | Box'(VarParam(name, minor)) -> "; Box:\n" ^
+    (format_string "lea rcx, [4 + %d]" minor) ^ "\n" ^
+    "MALLOC rax, WORD_SIZE" ^ "\n" ^
+    "mov rbx, [rbp + WORD_SIZE * rcx]" ^ "\n" ^
+    "mov [rax], rbx" ^ "\n"
+  | LambdaOpt'(must_params, opt_param, body) ->
+    let first_loop_label = (get_uniq_lable "copy_pointers") in
+    let second_loop_label = (get_uniq_lable "copy_parameters") in
+    let end_of_pointers_loop = (get_uniq_lable "end_pointers_copy") in
+    let end_of_parameters_loop = (get_uniq_lable "end_parameters_copy") in
+    let lcode_label = (get_uniq_lable "Lcode") in
+    let lcont_label = (get_uniq_lable "Lcont") in
+    let must_length = (List.length must_params) in
+    let actual_code_label = (get_uniq_lable "actual_code") in
+    let opt_list_creation_label = (get_uniq_lable "opt_list_creation") in
+    let make_list_loop = (get_uniq_lable "make_list_loop") in
+    let stack_reduction_label = (get_uniq_lable "stack_reduction") in
+    "; lambda optional: \n" ^
+    (format_string "lea rbx, [%d + 1]" env_size) ^ "\n" ^
+    "shl rbx, 3" ^ "\n" ^ (*TODO: verify this*)
+    "MALLOC rax, rbx" ^ "\n" ^
+    "push rax ; pushing ext_env for later \n" ^
+    ";copying pointers:\n" ^
+    (format_string "mov rcx, %d" env_size) ^ "\n" ^ 
+    "cmp rcx, 0" ^ "\n" ^
+    (format_string "je %s" end_of_pointers_loop) ^ "\n" ^
+    first_loop_label ^ ":" ^ "\n" ^
+    "push rcx" ^ "\n" ^
+    "neg rcx" ^ "\n" ^
+    (format_string "add rcx, %d" env_size) ^ "\n" ^
+    "mov rbx, [rbp + WORD_SIZE * 2] ; getting pointer to old env" ^ "\n" ^
+    "mov rdx, [rbx + rcx * WORD_SIZE] ; getting to rdx old_env[i]" ^ "\n" ^
+    "inc rcx" ^ "\n" ^
+    "mov [rax + WORD_SIZE * rcx], rdx ; putting env[i] (stored in rdx) into ext_env[i + 1]" ^ "\n" ^
+    "pop rcx ; restoring counter" ^ "\n" ^
+    "loop " ^ first_loop_label ^ "\n" ^
+    (format_string "%s:" end_of_pointers_loop) ^ "\n" ^
+    "mov rcx, [rbp + 3 * WORD_SIZE] ; getting to rcx the number of the current parameters \n" ^
+    "shl rcx, 3" ^ "\n" ^
+    "MALLOC rbx, rcx" ^ "\n" ^
+    "mov qword [rax], rbx ; getting the new allocated memory pointer to ext_env[0]" ^ "\n" ^
+    "mov rax, rbx ; more convinient with pointer to extenv[0] in rax \n" ^ "\n" ^ 
+    "mov rbx, rcx ; rbx will be constant and hold the size of params" ^ "\n" ^ 
+    "; copying parameters to new env \n" ^
+    "cmp rbx, 0" ^ "\n" ^ 
+    (format_string "je %s" end_of_parameters_loop) ^ "\n" ^ 
+    second_loop_label ^ ": \n" ^ 
+    "push rcx" ^ "\n" ^
+    "neg rcx" ^ "\n" ^
+    "add rcx, rbx ; rcx starts high and decreases with iterations" ^ "\n" ^
+    "lea rdx, [rbp + WORD_SIZE * rcx]" ^ "\n" ^ 
+    "add rdx, 4 * WORD_SIZE ; now rdx has the address of param_i \n" ^
+    "mov rdx, [rdx] ; now rdx has the param_i \n" ^ 
+    "mov [rax + WORD_SIZE * rcx], rdx \n" ^ 
+    "pop rcx" ^ "\n" ^
+    "loop " ^ second_loop_label ^ "\n" ^ 
+    (format_string "%s:\n" end_of_parameters_loop) ^
+    "pop rbx" ^ "\n" ^ 
+    (format_string "MAKE_CLOSURE(rax, rbx, %s)" lcode_label) ^ "\n" ^ 
+    (format_string "jmp %s" lcont_label) ^ "\n" ^ 
+    lcode_label ^ ": \n" ^ 
+    "push rbp" ^ "\n" ^
+    "mov rbp, rsp" ^ "\n" ^
+    "mov rax, [rbp + WORD_SIZE * 3]" ^ " ; rax <- n \n" ^
+    (format_string "cmp rax, %d" must_length) ^ "; n =? |must|\n" ^
+    "jne " ^ opt_list_creation_label ^ "\n" ^
+    "lea rbx, [rbp + WORD_SIZE * (rax + 4)]" ^ " ; magic <- Nil\n" ^
+    "mov qword [rbx], const_tbl" ^ "\n" ^
+    (format_string "jmp %s" actual_code_label) ^ "\n" ^
+    opt_list_creation_label ^ ":\n" ^
+    "mov rbx, const_tbl" ^ "\n" ^
+    "dec rax" ^ " ; rax <- n - 1\n" ^
+    (format_string "%s: ; create list loop \n" make_list_loop) ^
+    "mov rcx, [rbp + WORD_SIZE * (4 + rax)] ; rcx <- params[i]" ^ "\n" ^
+    (format_string "MAKE_PAIR(rbx, rcx, rbx)") ^ "\n" ^
+    "dec rax" ^ "\n" ^
+    (format_string "cmp rax, %d" must_length) ^ "\n" ^
+    (format_string "jge %s" make_list_loop) ^ "\n" ^
+    "mov rax, [rbp + WORD_SIZE * 3]" ^ "\n" ^
+    "dec rax" ^ "; rax <- n - 1\n" ^
+    "mov [rbp + WORD_SIZE * (4 + rax)], rbx" ^ "; save optional list on the stack\n" ^
+    (format_string "sub rax, %d" must_length) ^ " ; constant rax <- n - 1 - |must| (offset to move)\n" ^ 
+    (format_string "jz %s" actual_code_label) ^ "\n" ^
+    (format_string "lea rcx, [4 + %d]" must_length) ^ " ; i <- must_length + 4 \n" ^
+    (format_string "%s:\n" stack_reduction_label) ^ "\n" ^
+    "push rcx" ^ "\n" ^
+    "dec rcx" ^ "\n" ^
+    "mov rbx, [rbp + WORD_SIZE * rcx]" ^ "\n" ^
+    "add rcx, rax" ^ "\n" ^
+    "mov [rbp + WORD_SIZE * rcx], rbx" ^ "\n" ^
+    "pop rcx" ^ "\n" ^
+    (format_string "loop %s" stack_reduction_label) ^ "\n" ^
+    "lea rsp, [rsp + WORD_SIZE * rax]" ^ "\n" ^
+    "mov rbp, rsp" ^ "\n" ^
+    (format_string "mov qword [rbp + WORD_SIZE * 3], %d" must_length) ^ "\n" ^
+    actual_code_label ^ ":\n" ^
+    (generate_asm (env_size + 1) consts fvars body) ^ "\n" ^ 
+    "leave" ^ "\n" ^ 
+    "ret" ^ "\n" ^ 
+    lcont_label ^ ": \n"
+
   | _ -> raise X_not_yet_implemented 
   ;;
 

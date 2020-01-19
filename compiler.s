@@ -46,8 +46,11 @@ db T_STRING
 dq %1
 db %2
 %endmacro
-
+;---------------------------------------------------------------------
 %define MAKE_LITERAL_SYMBOL(address) MAKE_LITERAL T_SYMBOL, dq address
+
+%define LOWER_DATA(sob) qword [sob + TYPE_SIZE]
+%define UPPER_DATA(sob) qword [sob + WORD_SIZE + TYPE_SIZE]
 
 %macro SKIP_TYPE_TAG 2
 	mov %1, qword [%2+TYPE_SIZE]	
@@ -86,6 +89,7 @@ db %2
 %define SOB_VOID T_VOID
 %define SOB_FALSE word T_BOOL
 %define SOB_TRUE word (1 << TYPE_SIZE | T_BOOL)
+
 
 ; returns %2 allocated bytes in register %1
 ; Supports using with %1 = %2
