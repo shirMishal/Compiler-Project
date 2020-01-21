@@ -444,48 +444,6 @@ let format_string = Printf.sprintf;;
     "shl rbx, 3            ; rbx = rbx * 8"^"\n"^
     "add rbx, WORD_SIZE    ; clean magic"^"\n"^
     "add rsp, rbx          ; pop args"^"\n"
-    | ApplicTP' (proc_expr' , arg_list) ->
-    let copy_stack_label = (get_uniq_lable "copy_stack") in
-    ";applicTp:\n"^
-    
-    (List.fold_right (fun expr'_arg acc_string-> acc_string ^ (generate_asm_known_env_size consts fvars expr'_arg) ^ "\n"^"push rax"^"\n")  arg_list "")^
-    ";push num of args: \n"^
-    "mov rbx,"^(string_of_int (List.length arg_list)) ^"\n"^ "push rbx"^"\n"^
-    ";generate proc:\n"^
-    (generate_asm_known_env_size consts fvars proc_expr')^"\n"^
-    ";assuming we get correct input, no need to check type closure \n"^
-    "add rax, TYPE_SIZE \n"^
-    "mov rbx,[rax] ;rbx contains pointer to env"^"\n"^
-    "push rbx      ;push env pointer"^"\n"^
-    "add rax, WORD_SIZE \n"^
-    "mov rbx,[rax] ;rbx contains pointer to code"^"\n"^(*check its correct*)
-    ";------------------------changes in opt - do not use rbx---------------------"^"\n"^
-    "push qword [rbp + WORD_SIZE ] ; push old ret addr"^"\n"^
-    "mov rcx,"^(string_of_int (List.length arg_list)) ^";rcx= num of args \n"^
-    "add rcx, 3"^ ";3 for n, env, ret (rcx= num of cell to move) \n"^
-    "mov rdx, rcx"^" \n"^
-    "inc rdx"^";rdx is const to sub from rcx to get to current cell to copy \n"^
-    (format_string "%s:\n" copy_stack_label) ^ "\n" ^
-    (*"push rcx" ^ "\n" ^
-    "dec rcx" ^ "\n" ^
-    "mov rbx, [rbp + WORD_SIZE * rcx]" ^ "\n" ^
-    "add rcx, rax" ^ "\n" ^
-    "mov [rbp + WORD_SIZE * rcx], rbx" ^ "\n" ^
-    "pop rcx" ^ "\n" ^
-    (format_string "loop %s" stack_reduction_label) ^ "\n" ^
-*)
-
-
-
-    
-    "jmp rbx"^"   ; jmp instead of call \n"^
-    ";------------------------till here changes in opt---------------------"^"\n"^
-    ";clean stack"^"\n"^
-    "add rsp, WORD_SIZE *1 ; pop env\n"^
-    "pop rbx               ; pop arg count"^"\n"^
-    "shl rbx, 3            ; rbx = rbx * 8"^"\n"^
-    "add rbx, WORD_SIZE    ; clean magic"^"\n"^
-    "add rsp, rbx          ; pop args"^"\n"
   | Box'(VarParam(name, minor)) -> "; Box:\n" ^
     (format_string "lea rcx, [4 + %d]" minor) ^ "\n" ^
     "MALLOC rax, WORD_SIZE" ^ "\n" ^
@@ -587,6 +545,53 @@ let format_string = Printf.sprintf;;
     "leave" ^ "\n" ^ 
     "ret" ^ "\n" ^ 
     lcont_label ^ ": \n"
+  | ApplicTP' (proc_expr' , arg_list) ->
+    let copy_stack_label = (get_uniq_lable "copy_stack") in
+    ";applicTp:\n"^
+    
+    (List.fold_right (fun expr'_arg acc_string-> acc_string ^ (generate_asm_known_env_size consts fvars expr'_arg) ^ "\n"^"push rax"^"\n")  arg_list "")^
+    ";push num of args: \n"^
+    "mov rbx,"^(string_of_int (List.length arg_list)) ^ "\n" ^ "push rbx" ^ "\n" ^
+    ";generate proc:\n" ^
+    (generate_asm_known_env_size consts fvars proc_expr') ^ "\n"^
+    ";assuming we get correct input, no need to check type closure \n"^
+    "add rax, TYPE_SIZE \n"^
+    "mov rbx,[rax] ;rbx contains pointer to env"^"\n"^
+    "push rbx      ;push env pointer"^"\n"^
+    "add rax, WORD_SIZE \n"^
+    "mov rbx, [rax] ;rbx contains pointer to code"^" ; (rbx contains pointer to code)\n"^
+    ";------------------------changes in opt - do not use rbx ---------------------"^"\n"^
+    "push qword [rbp + WORD_SIZE ] ; push old ret addr"^"\n"^
+    "mov rsi, qword [rbp] ; rsi = oldrbp"^" ; (rsi contains old rbp) \n"^
+    "mov rdi, qword [rbp + 3 * WORD_SIZE] ; rdi = old n"^" ; (rdi contains old n) \n"^
+    "add rdi, 3 ;offset = rdi * wordsize "^"\n"^
+    "shl rdi, 3 ;offset = rdi "^" ; (rdi contains offset in bytes) \n" ^
+
+    "mov rcx,"^(string_of_int (List.length arg_list)) ^";rcx= new num of args \n"^
+    "add rcx, 3"^ ";3 for n, env, ret (rcx= num of cell to move)  ; (rcx contains num of elements to copy) \n"^
+    "mov rdx, rcx"^" \n"^
+    "inc rdx"^";rdx is const to sub from rcx to get to current cell to copy ; (rdx is const to sub from rcx to get to current cell to copy)
+ \n"^
+    (format_string "%s:\n" copy_stack_label) ^ "\n" ^
+    "push rcx" ^ "\n" ^
+    "sub rcx, rdx" ^ " ; rcx = (rcx-rdx)\n" ^
+    "lea rax, [rbp + WORD_SIZE * rcx]" ^ "; rax points cell to copy\n" ^
+    "mov rcx, [rax]" ^ "; rcx contains value to copy\n" ^
+    "add rax, rdi"^ "  ; rax points cell to update "^"\n"^
+    "mov qword [rax], rcx" ^ ";put new value in stack\n" ^
+    "pop rcx" ^"\n"^
+    (format_string "loop %s" copy_stack_label) ^ "\n" ^
+    (*update rbp rsp , rax points to ret address at update stack *)
+    "mov rsp, rax"^ " ;rsp = rax (rax points to ret address at update stack) \n" ^
+    "mov rbp, rsi"^ " ; rbp = old rbp \n"^
+    "jmp rbx"  ^" ; jmp instead of call \n"^
+    ";------------------------till here changes in opt---------------------"^"\n"^
+    ";clean stack"^"\n"^
+    "add rsp, WORD_SIZE *1 ; pop env\n"^
+    "pop rbx               ; pop arg count"^"\n"^
+    "shl rbx, 3            ; rbx = rbx * 8"^"\n"^
+    "add rbx, WORD_SIZE    ; clean magic"^"\n"^
+    "add rsp, rbx          ; pop args" ^ "\n"
 
   | _ -> raise X_not_yet_implemented 
   ;;
