@@ -1,3 +1,4 @@
+
 car_:
     push rbp
     mov rbp, rsp
@@ -20,7 +21,7 @@ cdr_:
 
 apply_:
     mov r10, rsp ; lets save the initial rsp in r10
-
+    mov r13, [r10 + 3 * WORD_SIZE] ; closure pointer
     ; now we want to check the size of the list
     xor rcx, rcx ; counter <- 0
     mov r9, [r10 + 2 * WORD_SIZE] ; r9 <- old n
@@ -31,16 +32,22 @@ apply_:
     mov rbx, rax
     .count_list_loop:
     inc rcx ; count++
-    mov r12, [rbx]
-    CDR rbx, r12 ; lets get to rbx the car
+    CDR rbx, rbx ; lets get to rbx the cdr
     cmp byte [rbx], T_NIL
     jne .count_list_loop
 
     .counted_list:
+    ; lets take a minute to calculate the new n :)))
+    mov r12, rcx
+    add r12, r9
+    sub r12, 2
+
     cmp rcx, 0
     je .list_is_on_stack
+    shl rcx, 3
     sub rsp, rcx
-    mov r8, rsp ; r8 <- src to copy list
+    shr rcx, 3
+    mov r8, rsp ; r8 <- dst to copy list
 
     .copy_list_to_stack:
     CAR rbx, rax ; lets get next element to rbx
@@ -50,35 +57,50 @@ apply_:
     loop .copy_list_to_stack
 
     .list_is_on_stack:
-    lea rax, [r10 + WORD_SIZE * (r9 + 1)] ; lets save in rax the pointer to the top most argument to copy
+    lea rax, [r10 + WORD_SIZE * (r9 + 1)] ; lets save in rax the pointer to the top most argument to push
     mov rcx, r9 ; old n
-    add rcx, 2 ; number of things to push
+    sub rcx, 2 ; number of things to push
     .push_loop:
     push qword [rax]
     sub rax, WORD_SIZE
     loop .push_loop
+    
+    push r12 ; push the new n
+    
+    ; lets get the env
+    mov rax, [r10 + WORD_SIZE * 3]
+    CLOSURE_ENV rax, rax
+    
+    push rax
+
+    ; lets push the ret address
+
+    push qword [r10]
+
 
     ; here we have the new stack under the old stack and we want to use mmap to ride over the old stack
     ; lets get edi <- dst, esi <- src, rdx <- size
 
     mov r11, r10 ; initial stack pointer
     sub r11, rsp ; this is the size of the new stack
+    mov rdx, r11
 
     lea rdi, [r10 + WORD_SIZE * (r9 + 3)] ; lets get to rdi the address of the end of old_stack (actually this is the pointer to the magic)
     sub rdi, r11
 
     mov rsi, rsp
-    push rdi ; save for later (to know where to move the stack pointer)
 
     mov rax, 0
+    push qword r13 ; closure pointer
 
     call memmove
-
-    pop rsp
+        
+    pop rbx ; closure pointer
+    
+    mov rsp, rax
 
     ; lets get code of the proc
-    mov rax, [rsp + WORD_SIZE * 3]
-    CLOSURE_CODE rbx, rax
+    CLOSURE_CODE rbx, rbx
     jmp rbx
 
 cons_:

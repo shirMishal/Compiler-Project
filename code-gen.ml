@@ -423,14 +423,17 @@ let format_string = Printf.sprintf;;
     "ret" ^ "\n" ^ 
     lcont_label ^ ": \n" 
   | Applic' (proc_expr' , arg_list) ->
-    ";applic:\n"^
+    let tag = (get_uniq_lable "applic") in
+    ";applic:" ^ tag ^ "\n"^
     ";push magic:\n"^
       "mov rbx, 0"^"\n"^ "push rbx"^"\n"^
     (List.fold_right (fun expr'_arg acc_string-> acc_string ^ (generate_asm_known_env_size consts fvars expr'_arg) ^ "\n"^"push rax"^"\n")  arg_list "")^
+    ";back to applic: " ^ tag ^ "\n" ^
     ";push num of args: \n"^
     "mov rbx,"^(string_of_int (List.length arg_list)) ^"\n"^ "push rbx"^"\n"^
     ";generate proc:\n"^
     (generate_asm_known_env_size consts fvars proc_expr')^"\n"^
+    ";back to applic: " ^ tag ^ "\n" ^
     ";assuming we get correct input, no need to check type closure \n"^
     "add rax, TYPE_SIZE \n"^
     "mov rbx,[rax] ;rbx contains pointer to env"^"\n"^
@@ -461,6 +464,8 @@ let format_string = Printf.sprintf;;
     let opt_list_creation_label = (get_uniq_lable "opt_list_creation") in
     let make_list_loop = (get_uniq_lable "make_list_loop") in
     let stack_reduction_label = (get_uniq_lable "stack_reduction") in
+    let param_names_for_debug = (List.fold_left (fun acc name -> acc ^ ", " ^ name) "" must_params) in
+    "; " ^ param_names_for_debug ^ "\n" ^
     "; lambda optional: \n" ^
     (format_string "lea rbx, [%d + 1]" env_size) ^ "\n" ^
     "shl rbx, 3" ^ "\n" ^ (*TODO: verify this*)
@@ -547,7 +552,7 @@ let format_string = Printf.sprintf;;
     lcont_label ^ ": \n"
   | ApplicTP' (proc_expr' , arg_list) ->
     let copy_stack_label = (get_uniq_lable "copy_stack") in
-    ";applicTp:\n"^
+    ";applicTp:\n" ^
     
     (List.fold_right (fun expr'_arg acc_string-> acc_string ^ (generate_asm_known_env_size consts fvars expr'_arg) ^ "\n"^"push rax"^"\n")  arg_list "")^
     ";push num of args: \n"^

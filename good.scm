@@ -1,0 +1,1 @@
+((lambda (proc a b c d) (proc a b c d)) (lambda (a . b) b) 1 2 3 4 '(4 3 2 1))

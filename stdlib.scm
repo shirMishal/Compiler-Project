@@ -15,31 +15,20 @@
   (let ((null? null?)
   		(car car)
 		(cdr cdr))
-  	(lambda (fun list acc)
-  	(if (null? (cdr list))
-	  (fun (car list) acc) 
-	  (fun (car list) (fold-right fun (cdr list) acc))))))
+  	(lambda (fun acc list)
+  	(if (null? list)
+	  	acc
+	  (fun (car list) (fold-right fun acc (cdr list)))))))
 
-(define fold-right
+
+(define fold-left
   (let ((null? null?)
   		(car car)
 		(cdr cdr))
 	(lambda (fun acc list)
-		(if (null? (cdr list))
-			(fun acc (car list)
-			(fold-right (fun acc (car list)) (cdr list)))))))
-
-(define cons*
-	(let ((car car)
-		  (cdr cdr)
-		  (null? null?))
-	(lambda list_to_cons
-	(if (null? list_to_cons)
-		'()
-		(if (null? (cdr list_to_cons))
-			(car list_to_cons)
-			(cons (car list_to_cons) (cons* (cdr list_to_cons))))))))
-
+		(if (null? list)
+			acc
+			(fun (fold-left fun acc (cdr list)) (car list))))))
 (define append
   (let ((null? null?)
 	(fold-right fold-right)
@@ -50,6 +39,23 @@
 			e
 			(fold-right cons a e)))
 		  '() args))))
+
+
+(define cons*
+    (let ((car car)
+            (cdr cdr)
+        	(null? null?)
+			(list list)
+			(append append)
+			(cons cons)
+			(fold-right fold-right))
+	(letrec ((rev (lambda (lst)
+				(if (null? lst) lst (append (rev (cdr lst)) (list (car lst))))))
+		)
+      (lambda list_to_cons
+        (fold-right cons (car (rev list_to_cons)) (rev (cdr (rev list_to_cons))))
+      ))))
+
 
 (define list (lambda x x))
 
