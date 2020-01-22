@@ -171,7 +171,7 @@ db %2
         MAKE_TWO_WORDS r, T_CLOSURE, env, body
 
 	
-extern printf, malloc
+extern printf, malloc, memmove
 global write_sob, write_sob_if_not_void
 
 	

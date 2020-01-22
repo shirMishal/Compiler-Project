@@ -18,6 +18,69 @@ cdr_:
     leave
     ret
 
+apply_:
+    mov r10, rsp ; lets save the initial rsp in r10
+
+    ; now we want to check the size of the list
+    xor rcx, rcx ; counter <- 0
+    mov r9, [r10 + 2 * WORD_SIZE] ; r9 <- old n
+    mov rax, [r10 + WORD_SIZE * (r9 + 2)] ; rax <- pointer to list
+    
+    cmp byte [rax], T_NIL ; lets check if its null
+    je .counted_list
+    mov rbx, rax
+    .count_list_loop:
+    inc rcx ; count++
+    mov r12, [rbx]
+    CDR rbx, r12 ; lets get to rbx the car
+    cmp byte [rbx], T_NIL
+    jne .count_list_loop
+
+    .counted_list:
+    cmp rcx, 0
+    je .list_is_on_stack
+    sub rsp, rcx
+    mov r8, rsp ; r8 <- src to copy list
+
+    .copy_list_to_stack:
+    CAR rbx, rax ; lets get next element to rbx
+    mov [r8], rbx
+    add r8, WORD_SIZE
+    CDR rax, rax
+    loop .copy_list_to_stack
+
+    .list_is_on_stack:
+    lea rax, [r10 + WORD_SIZE * (r9 + 1)] ; lets save in rax the pointer to the top most argument to copy
+    mov rcx, r9 ; old n
+    add rcx, 2 ; number of things to push
+    .push_loop:
+    push qword [rax]
+    sub rax, WORD_SIZE
+    loop .push_loop
+
+    ; here we have the new stack under the old stack and we want to use mmap to ride over the old stack
+    ; lets get edi <- dst, esi <- src, rdx <- size
+
+    mov r11, r10 ; initial stack pointer
+    sub r11, rsp ; this is the size of the new stack
+
+    lea rdi, [r10 + WORD_SIZE * (r9 + 3)] ; lets get to rdi the address of the end of old_stack (actually this is the pointer to the magic)
+    sub rdi, r11
+
+    mov rsi, rsp
+    push rdi ; save for later (to know where to move the stack pointer)
+
+    mov rax, 0
+
+    call memmove
+
+    pop rsp
+
+    ; lets get code of the proc
+    mov rax, [rsp + WORD_SIZE * 3]
+    CLOSURE_CODE rbx, rax
+    jmp rbx
+
 cons_:
     push rbp
     mov rbp, rsp

@@ -1,1 +1,1 @@
-((lambda (x)  ((lambda (y) (cons x y)) 'shir)) 'michael)
+(apply + 1 2 3 '(4 5 6))

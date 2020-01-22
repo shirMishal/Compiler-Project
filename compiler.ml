@@ -18,7 +18,7 @@ let primitive_names_to_labels =
    "symbol->string", "symbol_to_string"; 
    "char->integer", "char_to_integer"; "integer->char", "integer_to_char"; "eq?", "is_eq";
    "+", "bin_add"; "*", "bin_mul"; "-", "bin_sub"; "/", "bin_div"; "<", "bin_lt"; "=", "bin_equ"
-(* you can add yours here *); "car", "car_" ; "cdr", "cdr_"; "cons", "cons_"; "set-car!", "set_car" ; "set-cdr!", "set_cdr"];;
+(* you can add yours here *); "car", "car_" ; "cdr", "cdr_"; "cons", "cons_"; "set-car!", "set_car" ; "set-cdr!", "set_cdr"; "apply", "apply_"];;
 
 let make_prologue consts_tbl fvars_tbl =
   let make_primitive_closure (prim, label) =
@@ -121,5 +121,6 @@ try
   print_string ((make_prologue consts_tbl fvars_tbl)  ^
                   code_fragment ^ clean_exit ^
                     provided_primitives ^ "\n" ^ epilogue)
+  
 
 with Invalid_argument(x) -> raise X_missing_input_file;;

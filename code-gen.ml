@@ -94,7 +94,7 @@ let primitive_vars =
    ("symbol->string", 13); 
    ("char->integer", 14); ("integer->char", 15); ("eq?", 16);
    ("+", 17); ("*", 18);( "-", 19); ("/", 20); ("<", 21); ("=", 22)
-(* you can add yours here *); ("car",23); ("cdr",24); ("cons",25); ("set-car!",26); ("set-cdr!",27)];;
+(* you can add yours here *); ("car",23); ("cdr",24); ("cons",25); ("set-car!",26); ("set-cdr!",27) ; ("apply", 28)];;
 
 let rec make_free_var_set current_set_of_names ast_expr' = 
 let make_set_local = (make_free_var_set current_set_of_names) in
@@ -117,7 +117,7 @@ SS.union current_set_of_names (match ast_expr' with
 | _ -> SS.empty);;
 
 let make_free_var_table asts =
-let offset_counter = ref (List.length primitive_vars ) in
+let offset_counter = ref (List.length primitive_vars) in
 let list_of_set_of_names = (map (make_free_var_set SS.empty) asts) in
 let set_of_names = (List.fold_left SS.union SS.empty list_of_set_of_names) in
 let list_of_names = SS.elements set_of_names in
@@ -556,42 +556,40 @@ let format_string = Printf.sprintf;;
     (generate_asm_known_env_size consts fvars proc_expr') ^ "\n"^
     ";assuming we get correct input, no need to check type closure \n"^
     "add rax, TYPE_SIZE \n"^
-    "mov rbx,[rax] ;rbx contains pointer to env"^"\n"^
+    "mov rbx, [rax] ;rbx contains pointer to env"^"\n"^
     "push rbx      ;push env pointer"^"\n"^
     "add rax, WORD_SIZE \n"^
     "mov rbx, [rax] ;rbx contains pointer to code"^" ; (rbx contains pointer to code)\n"^
     ";------------------------changes in opt - do not use rbx ---------------------"^"\n"^
     "push qword [rbp + WORD_SIZE ] ; push old ret addr"^"\n"^
-    "mov rsi, qword [rbp] ; rsi = oldrbp"^" ; (rsi contains old rbp) \n"^
-    "mov rdi, qword [rbp + 3 * WORD_SIZE] ; rdi = old n"^" ; (rdi contains old n) \n"^
-    "add rdi, 3 ;offset = rdi * wordsize "^"\n"^
-    "shl rdi, 3 ;offset = rdi "^" ; (rdi contains offset in bytes) \n" ^
+    "; lets get to rax the dst to copy" ^ "\n" ^
+    "mov rax, [rbp + WORD_SIZE * 3]" ^ "\n" ^
+    "mov r9, [rbp]" ^ "\n" ^
+    "add rax, 3" ^ "\n" ^
+    "shl rax, 3" ^ "\n" ^
+    "add rax, rbp" ^ "\n" ^
 
-    "mov rcx,"^(string_of_int (List.length arg_list)) ^";rcx= new num of args \n"^
-    "add rcx, 3"^ ";3 for n, env, ret (rcx= num of cell to move)  ; (rcx contains num of elements to copy) \n"^
-    "mov rdx, rcx"^" \n"^
-    "inc rdx"^";rdx is const to sub from rcx to get to current cell to copy ; (rdx is const to sub from rcx to get to current cell to copy)
- \n"^
+    "; lets get to rdx the src to copy" ^ "\n" ^
+    "mov rdx, [rsp + WORD_SIZE * 2]" ^ "\n" ^
+    "mov r10, rdx" ^ "\n" ^
+    "add rdx, 2" ^ "\n" ^
+    "shl rdx, 3" ^ "\n" ^
+    "add rdx, rsp" ^ "\n" ^
+
+    "; lets get to rcx the number of iterations needed" ^ "\n" ^
+    "lea rcx, [r10 + 3]" ^ "\n" ^
+
     (format_string "%s:\n" copy_stack_label) ^ "\n" ^
-    "push rcx" ^ "\n" ^
-    "sub rcx, rdx" ^ " ; rcx = (rcx-rdx)\n" ^
-    "lea rax, [rbp + WORD_SIZE * rcx]" ^ "; rax points cell to copy\n" ^
-    "mov rcx, [rax]" ^ "; rcx contains value to copy\n" ^
-    "add rax, rdi"^ "  ; rax points cell to update "^"\n"^
-    "mov qword [rax], rcx" ^ ";put new value in stack\n" ^
-    "pop rcx" ^"\n"^
+    "mov r11, [rdx]" ^ "\n" ^
+    "mov [rax], r11" ^ "\n" ^
+    "sub rax, 8" ^ "\n" ^
+    "sub rdx, 8" ^ "\n" ^
     (format_string "loop %s" copy_stack_label) ^ "\n" ^
-    (*update rbp rsp , rax points to ret address at update stack *)
-    "mov rsp, rax"^ " ;rsp = rax (rax points to ret address at update stack) \n" ^
-    "mov rbp, rsi"^ " ; rbp = old rbp \n"^
-    "jmp rbx"  ^" ; jmp instead of call \n"^
-    ";------------------------till here changes in opt---------------------"^"\n"^
-    ";clean stack"^"\n"^
-    "add rsp, WORD_SIZE *1 ; pop env\n"^
-    "pop rbx               ; pop arg count"^"\n"^
-    "shl rbx, 3            ; rbx = rbx * 8"^"\n"^
-    "add rbx, WORD_SIZE    ; clean magic"^"\n"^
-    "add rsp, rbx          ; pop args" ^ "\n"
+
+    "add rax, 8" ^ "\n" ^
+    "mov rsp, rax" ^ "\n" ^
+    "mov rbp, r9" ^ "\n" ^
+    "jmp rbx"
 
   | _ -> raise X_not_yet_implemented 
   ;;
