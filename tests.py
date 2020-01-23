@@ -2,7 +2,7 @@ import os
 import shutil
 
 # change this to your local directory - the folder where all the .ml files are
-directory = "CompiAss1"
+directory = "Compiler"
 
 
 
@@ -426,6 +426,7 @@ for i in range(1,175):
     try:
         current_file = open(all_tests[i]["name"]+".scm","w+")
         current_file.write(all_tests[i]["input"])
+	print(all_tests[i]["input"] + "\n\n\n")
         current_file.close()
         os.system("make -f ./{0}/Makefile {1}".format(directory,all_tests[i]["name"]))
         os.system("./{0} > {1}".format(all_tests[i]["name"],"compiler_output"+str(i)+".txt"))

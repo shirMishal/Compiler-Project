@@ -249,7 +249,7 @@ match param_list with
                             ) binding_lst in
   let new_param_pairs = (create_nested_pairs new_param_list)in 
   let set_list = List.map (fun single_rib -> Pair(Symbol "set!", single_rib)) binding_lst in
-  let new_body = (match body with | Pair(Pair(op, args), Nil) -> Pair(op, args)
+  let new_body = (match body with | Pair(real_body, Nil) -> real_body
                                   | Nil -> raise X_syntax_error 
                                   | _ -> body ) in
   (*let new_body = Pair(Symbol "let", Pair(Nil, body)) in*)

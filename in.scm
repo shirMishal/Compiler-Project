@@ -1,1 +1,1 @@
-(apply (lambda (a . b) b) 1 2 3 4 '(4 3 2 1))
+(define foo (lambda (x . y) (lambda (z) y))) ((foo 1)2)

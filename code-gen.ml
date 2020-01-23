@@ -272,11 +272,11 @@ match sexpr_list with
 | hd:: tl -> (match hd with 
               | Sexpr(Number(Int (integer)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_INT("^(string_of_int integer)^")" )])
               | Sexpr(Number(Float (float)))-> make_tuples tl (offset + number_object_length) (const_tbl @ [hd, (offset,"MAKE_LITERAL_FLOAT("^(string_of_float float)^")")])
-              | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_CHAR('"^(Char.escaped char)^"')")])
+              | Sexpr (Char (char)) -> make_tuples tl (offset + char_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_CHAR("^(string_of_int (Char.code char))^")")])
               | Sexpr (String (string)) -> make_tuples tl (offset + (String.length string) + string_object_length) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_STRING "^(string_of_int (String.length string))^ ", \"" ^ string ^"\""))])
               | Sexpr (Symbol (name_str)) -> make_tuples tl (offset + symbol_object_length) (const_tbl @ [hd, (offset, "MAKE_LITERAL_SYMBOL(const_tbl+" ^ (string_of_int (find_offset (Sexpr(String(name_str))) const_tbl))^")")])
               | Sexpr(TagRef(tag_name)) -> make_tuples tl offset const_tbl
-              | Sexpr(Pair(car, cdr)) -> make_tuples tl (offset + (pointer_length * 2)+1) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_PAIR( const_tbl +" ^ (string_of_int (find_offset (Sexpr(car)) const_tbl)) ^ " , const_tbl +" ^ (string_of_int (find_offset (Sexpr(cdr)) const_tbl) ^ ")")))])
+              | Sexpr(Pair(car, cdr)) -> make_tuples tl (offset + (pointer_length * 2) + 1) (const_tbl @ [(hd, (offset, "MAKE_LITERAL_PAIR( const_tbl +" ^ (string_of_int (find_offset (Sexpr(car)) const_tbl)) ^ " , const_tbl +" ^ (string_of_int (find_offset (Sexpr(cdr)) const_tbl) ^ ")")))])
               | Sexpr(TaggedSexpr(name, value)) -> make_tuples tl offset const_tbl 
               | _ -> raise (X_this_shouldnt_happen_error "from tuple"))
 ;;
@@ -337,12 +337,12 @@ let format_string = Printf.sprintf;;
   let rec generate_asm env_size consts fvars e = 
   let generate_asm_known_env_size = (generate_asm env_size) in
   match e with
-  | Const'(constant) -> ";constant\n" ^ "lea rax, [const_tbl+ "^(string_of_int (find_offset constant consts)) ^"]\n" 
+  | Const'(constant) -> ";constant\n" ^ "lea rax, [const_tbl+ " ^ (string_of_int (find_offset constant consts)) ^"]\n" 
   | Var'(var) -> 
   ( match var with
-    | VarFree (v) -> ";free variable:\n" ^ "mov rax, qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE]"
-    | VarParam(_, minor) -> ";parameter variable:\n" ^ (format_string "mov rax, [rbp + WORD_SIZE * (4 + %d)]" minor)
-    | VarBound(_, major, minor) -> ";bound variable:\n" ^ "mov rbx, [rbp + WORD_SIZE * 2]" ^ "\n" ^ (format_string "mov rbx, [rbx + WORD_SIZE * %d]" major) ^ "\n" ^ (format_string "mov rax, [rbx + WORD_SIZE * %d]" minor)
+    | VarFree (v) -> ";free variable:\n" ^ "mov rax, qword [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE]" ^ "\n"
+    | VarParam(_, minor) -> ";parameter variable:\n" ^ (format_string "mov rax, [rbp + WORD_SIZE * (4 + %d)]" minor) ^ "\n"
+    | VarBound(_, major, minor) -> ";bound variable:\n" ^ "mov rbx, [rbp + WORD_SIZE * 2]" ^ "\n" ^ (format_string "mov rbx, [rbx + WORD_SIZE * %d]" major) ^ "\n" ^ (format_string "mov rax, [rbx + WORD_SIZE * %d]" minor) ^ "\n"
   )
   | Def' (Var'(VarFree (v)) , expr') -> ";define:\n" ^ (generate_asm_known_env_size consts fvars expr') ^ "mov [fvar_tbl + "^(string_of_int (find_offset_fvars v fvars))^" * WORD_SIZE], rax \n lea rax, [const_tbl+1] \n" 
   | Seq' (expr'_list) -> ";sequence:\n" ^ (List.fold_left (fun  acc_string expr' -> acc_string ^ (generate_asm_known_env_size consts fvars expr') ^ "\n")  "" expr'_list )
@@ -373,14 +373,14 @@ let format_string = Printf.sprintf;;
     let lcode_label = (get_uniq_lable "Lcode") in
     let lcont_label = (get_uniq_lable "Lcont") in
     ";simple lambda:\n" ^
-    (format_string "lea rbx, [%d + 1]" env_size) ^ "\n" ^
+    (format_string "mov rbx, %d" env_size) ^ "\n" ^
     "shl rbx, 3" ^ "\n" ^ (*TODO: verify this*)
     "MALLOC rax, rbx" ^ "\n" ^
-    "push rax ; pushing ext_env for later \n" ^
+    "push rax; pushing ext_env for later \n" ^
     ";copying pointers:\n" ^
     (format_string "mov rcx, %d" env_size) ^ "\n" ^ 
-    "cmp rcx, 0" ^ "\n" ^
-    (format_string "je %s" end_of_pointers_loop) ^ "\n" ^
+    "cmp rcx, 1" ^ "\n" ^
+    (format_string "jle %s" end_of_pointers_loop) ^ "\n" ^
     first_loop_label ^ ":" ^ "\n" ^
     "push rcx" ^ "\n" ^
     "neg rcx" ^ "\n" ^
@@ -393,6 +393,7 @@ let format_string = Printf.sprintf;;
     "loop " ^ first_loop_label ^ "\n" ^
     (format_string "%s:" end_of_pointers_loop) ^ "\n" ^
     "mov rcx, [rbp + 3 * WORD_SIZE] ; getting to rcx the number of the current parameters \n" ^
+    "inc rcx" ^ "\n" ^
     "shl rcx, 3" ^ "\n" ^
     "MALLOC rbx, rcx" ^ "\n" ^
     "mov qword [rax], rbx ; getting the new allocated memory pointer to ext_env[0]" ^ "\n" ^
@@ -435,11 +436,9 @@ let format_string = Printf.sprintf;;
     (generate_asm_known_env_size consts fvars proc_expr')^"\n"^
     ";back to applic: " ^ tag ^ "\n" ^
     ";assuming we get correct input, no need to check type closure \n"^
-    "add rax, TYPE_SIZE \n"^
-    "mov rbx,[rax] ;rbx contains pointer to env"^"\n"^
+    "CLOSURE_ENV rbx, rax ;rbx contains pointer to env"^"\n"^
     "push rbx      ;push env pointer"^"\n"^
-    "add rax, WORD_SIZE \n"^
-    "mov rbx,[rax] ;rbx contains pointer to code"^"\n"^(*check its correct*)
+    "CLOSURE_CODE rbx, rax \n"^
     "call rbx"^"\n"^
     ";clean stack"^"\n"^
     "add rsp, WORD_SIZE *1 ; pop env\n"^
@@ -467,14 +466,14 @@ let format_string = Printf.sprintf;;
     let param_names_for_debug = (List.fold_left (fun acc name -> acc ^ ", " ^ name) "" must_params) in
     "; " ^ param_names_for_debug ^ "\n" ^
     "; lambda optional: \n" ^
-    (format_string "lea rbx, [%d + 1]" env_size) ^ "\n" ^
+    (format_string "mov rbx, %d" env_size) ^ "\n" ^
     "shl rbx, 3" ^ "\n" ^ (*TODO: verify this*)
     "MALLOC rax, rbx" ^ "\n" ^
     "push rax ; pushing ext_env for later \n" ^
     ";copying pointers:\n" ^
     (format_string "mov rcx, %d" env_size) ^ "\n" ^ 
-    "cmp rcx, 0" ^ "\n" ^
-    (format_string "je %s" end_of_pointers_loop) ^ "\n" ^
+    "cmp rcx, 1" ^ "\n" ^
+    (format_string "jle %s" end_of_pointers_loop) ^ "\n" ^
     first_loop_label ^ ":" ^ "\n" ^
     "push rcx" ^ "\n" ^
     "neg rcx" ^ "\n" ^
@@ -487,6 +486,7 @@ let format_string = Printf.sprintf;;
     "loop " ^ first_loop_label ^ "\n" ^
     (format_string "%s:" end_of_pointers_loop) ^ "\n" ^
     "mov rcx, [rbp + 3 * WORD_SIZE] ; getting to rcx the number of the current parameters \n" ^
+    "inc rcx" ^ "\n" ^
     "shl rcx, 3" ^ "\n" ^
     "MALLOC rbx, rcx" ^ "\n" ^
     "mov qword [rax], rbx ; getting the new allocated memory pointer to ext_env[0]" ^ "\n" ^
@@ -601,7 +601,7 @@ let format_string = Printf.sprintf;;
 
   let make_consts_tbl asts = make_list_for_consts_tbl asts;;
   let make_fvars_tbl asts = primitive_vars@ (make_free_var_table asts);;
-  let generate consts fvars e = generate_asm 0 consts fvars e;;
+  let generate consts fvars e = (get_uniq_lable "some_compiled_section") ^ ":\n" ^ generate_asm 0 consts fvars e;;
   
 end;;
 

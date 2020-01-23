@@ -1,4 +1,5 @@
 #use "code-gen.ml";;
+open Format
 
 let file_to_string f =
   let ic = open_in f in
@@ -84,10 +85,6 @@ main:
     ;; for all the primitive procedures.
 " ^ (String.concat "\n" (List.map make_primitive_closure primitive_names_to_labels)) ^ "
 
-user_code_fragment:
-;;; The code you compiled will be catenated here.
-;;; It will be executed immediately after the closures for 
-;;; the primitive procedures are set up.
 
 ";;
 
@@ -100,9 +97,11 @@ let epilogue = "";;
 
 exception X_missing_input_file;;
 
+
 try
   let infile = Sys.argv.(1) in
-  let code =  (file_to_string "stdlib.scm") ^ (file_to_string infile) in
+  let input_code = (file_to_string infile) in
+  let code = (file_to_string "stdlib.scm") ^ input_code in
   let asts = string_to_asts code in
   let asts = Code_Gen.rename_refs asts in
   let consts_tbl = Code_Gen.make_consts_tbl asts in

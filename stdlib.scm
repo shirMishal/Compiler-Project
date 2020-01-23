@@ -1,3 +1,5 @@
+(define list (lambda x x))
+
 (define map
   (let ((null? null?)
 	(car car) (cdr cdr)
@@ -29,6 +31,9 @@
 		(if (null? list)
 			acc
 			(fun (fold-left fun acc (cdr list)) (car list))))))
+
+
+
 (define append
   (let ((null? null?)
 	(fold-right fold-right)
@@ -55,9 +60,20 @@
       (lambda list_to_cons
         (fold-right cons (car (rev list_to_cons)) (rev (cdr (rev list_to_cons))))
       ))))
+	  
+(define map
+  (let ((null? null?)
+	(car car) (cdr cdr)
+	(cons cons) (apply apply))
+    (letrec ((map-loop (lambda (f l . ls)
+		     (if (null? l)
+			 '() ; simplifying assumption: if l is empty, then ls is also empty
+			 (if (null? ls)
+			     (cons (f (car l)) (map-loop f (cdr l)))
+			     (cons (apply f (car l) (map-loop car ls))
+				   (apply map f (cdr l) (map-loop cdr ls))))))))
+      map-loop)))
 
-
-(define list (lambda x x))
 
 (define list? 
   (let ((null? null?)
@@ -68,6 +84,12 @@
 			       (and (pair? x)
 				    (list? (cdr x)))))))
       list?-loop)))
+
+
+(define +
+  (let ((fold-left fold-left)
+	(+ +))
+    (lambda x (fold-left + 0 x))))
 
 (define length
   (let ((fold-left fold-left)
@@ -92,10 +114,6 @@
     (lambda (x)
       (or (float? x) (integer? x)))))
 
-(define +
-  (let ((fold-left fold-left)
-	(+ +))
-    (lambda x (fold-left + 0 x))))
 
 (define *
   (let ((fold-left fold-left)

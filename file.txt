@@ -1,0 +1,29 @@
+Applic'                                                                                                                                                   
+ (LambdaSimple' (["map-loop"],                                                                                                                            
+   Seq'
+    [Set' (Var' (VarParam ("map-loop", 0)), Box' (VarParam ("map-loop", 0)));
+     Seq'
+      [BoxSet' (VarParam ("map-loop", 0),
+        LambdaOpt' (["f"; "l"], "ls",
+         If' (Applic' (Var' (VarFree "null?"), [Var' (VarParam ("l", 1))]),
+          Const' (Sexpr Nil),
+          If' (Applic' (Var' (VarFree "null?"), [Var' (VarParam ("ls", 2))]),
+           ApplicTP' (Var' (VarFree "cons"),
+            [Applic' (Var' (VarParam ("f", 0)),
+              [Applic' (Var' (VarFree "car"), [Var' (VarParam ("l", 1))])]);
+             Applic' (BoxGet' (VarBound ("map-loop", 0, 0)),
+              [Var' (VarParam ("f", 0));
+               Applic' (Var' (VarFree "cdr"), [Var' (VarParam ("l", 1))])])]),
+           ApplicTP' (Var' (VarFree "cons"),
+            [Applic' (Var' (VarFree "apply"),
+              [Var' (VarParam ("f", 0));
+               Applic' (Var' (VarFree "car"), [Var' (VarParam ("l", 1))]);
+               Applic' (BoxGet' (VarBound ("map-loop", 0, 0)),
+                [Var' (VarFree "car"); Var' (VarParam ("ls", 2))])]);
+             Applic' (Var' (VarFree "apply"),
+              [Var' (VarFree "map"); Var' (VarParam ("f", 0));
+               Applic' (Var' (VarFree "cdr"), [Var' (VarParam ("l", 1))]);
+               Applic' (BoxGet' (VarBound ("map-loop", 0, 0)),
+                [Var' (VarFree "cdr"); Var' (VarParam ("ls", 2))])])])))));
+       ApplicTP' (BoxGet' (VarParam ("map-loop", 0)), [])]]),
+ [Const' (Sexpr (Symbol "whatever"))])
