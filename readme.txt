@@ -1,3 +1,17 @@
+Compiler Principles - Assembly X86, Scheme, Ocaml, functional programming, optimizations, Linux, GitHub
+Coded a compiler which converted Scheme code into Assembly X86 64bit. 
+Implemented a reader, tag-parser, semantic analyser (scopes, tail-call optimization) and code generator.
+
+
+
+
+
+
+
+
+
+
+-----------------------------------------------------------------------------------------
 We assert that the work we submitted is 100% our own. We have not received any
 part from any other student in the class, nor have we give parts of it for use to others.
 Nor have we used code from other sources: Courses taught previously at this university,
