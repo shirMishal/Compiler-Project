@@ -1,4 +1,4 @@
-# Compiler from Scheme into Assembly X86
+# Compiler from Scheme code into Assembly X86
 ### Skills:
 Assembly X86, Scheme, Ocaml, functional programming, optimizations, Linux, GitHub
 ### Description:
